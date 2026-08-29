@@ -42,10 +42,10 @@ flowchart LR
 
 **See it running, right now.** The
 [Open Agriculture Technology Test Endpoint](https://iot-test.openagriculturetechnology.com/)
-is OAT's flagship endpoint — a live console where our own gateways (built from
-the sketches in this repo) are pushing readings as you read this. Open it — no
-sign-in. That console is what "an endpoint you own" can become, and everything
-in [`endpoint/`](endpoint/) helps you build yours.
+is a live console where our own gateways (built from the sketches in this repo)
+are pushing readings as you read this. Open it — no sign-in. That console is
+what "an endpoint you own" can become, and everything in
+[`endpoint/`](endpoint/) helps you build yours.
 
 The message format is [**oat-ods**](https://openagriculturetechnology.com/standard/) —
 one JSON envelope for every sensor, so your endpoint can't tell a $600 research

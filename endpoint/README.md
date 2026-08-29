@@ -34,10 +34,9 @@ flowchart LR
 ## See one running
 
 The **[Open Agriculture Technology Test Endpoint](https://iot-test.openagriculturetechnology.com/)**
-is OAT's flagship: a live endpoint console with our own gateways pushing
-readings into it right now — open it, no sign-in. It's the proof that
-everything below is real, and the picture of what your own endpoint can grow
-into.
+is a live endpoint console with our own gateways pushing readings into it right
+now — open it, no sign-in. It's the proof that everything below is real, and
+the picture of what your own endpoint can grow into.
 
 ## Prove yours talks — two minutes in the sandbox
 
