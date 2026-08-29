@@ -22,8 +22,8 @@ The receiving half of the <a href="../">OAT Sketch Library</a>: same open
 
 An endpoint is just a small program that accepts what a gateway sends and keeps
 it — on a Raspberry Pi, a spare machine, or a cloud box; either way, yours. The
-trust ladder here has no gaps: **see ours live → prove yours talks → run a
-receiver → build your own.**
+trust ladder here has no gaps: **test your gateway on ours → check conformance
+in the sandbox → run a receiver → build your own.**
 
 ```mermaid
 flowchart LR
@@ -31,14 +31,29 @@ flowchart LR
   E --> U["Dashboards · alerts<br>records you keep"]
 ```
 
-## See one running
+## Test your gateway on ours
 
 The **[Open Agriculture Technology Test Endpoint](https://iot-test.openagriculturetechnology.com/)**
-is a live endpoint console with our own gateways pushing readings into it right
-now — open it, no sign-in. It's the proof that everything below is real, and
-the picture of what your own endpoint can grow into.
+is a live console built for exactly one thing: **testing an OAT gateway you
+just flashed.** Enter
 
-## Prove yours talks — two minutes in the sandbox
+```
+http://iot-test.openagriculturetechnology.com/ingest
+```
+
+as the node's endpoint URL (plain `http://` is by design — an ESP32 can't
+spare the memory for TLS, and the oat1 signature over the body is what keeps
+plain HTTP safe). Open the console, pick your farm — the gateway name you set
+at setup — and there it is: **your gateway and its sensors, live** — readings,
+VPD charts, the 60-second heartbeat, fleet health. No account, no
+registration; showing up in the data *is* the registration. Go quiet for
+about an hour and you vanish; push again and you're back. Our own nodes are
+on it right now — it works, and it's the picture of what your own endpoint
+can grow into. (It's a proof-of-life bench, not storage: readings are kept
+about an hour. When your gateway checks out, land your data somewhere you
+keep — that's everything below.)
+
+## Check conformance — two minutes in the sandbox
 
 OAT also runs a **[conformance sandbox](https://openagriculturetechnology.com/standard/test-endpoint/)** —
 free, public, no account needed. You don't even need hardware:

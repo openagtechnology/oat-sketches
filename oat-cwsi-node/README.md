@@ -58,18 +58,19 @@ the soil or pot, and avoid sun glinting into the sensor.
 2. Join the node's `OAT-CWSI-xxxx` Wi-Fi, open the setup page (admin / `oatsetup`).
 3. Set Wi-Fi + delivery (webhook URL **or** MQTT), the **stream id** (the canopy
    spot, e.g. `gh2-canopy`), and the interval. Save & reboot.
-4. **Watch it land.** You're welcome to point delivery at OAT's live
-   [test endpoint](https://openagriculturetechnology.com/standard/test-endpoint/) —
-   a free public sandbox, no account needed. Open the page, pick a box name,
-   paste the endpoint URL it gives you into the node's delivery field, and your
-   readings appear on that page within seconds — parsed fields alongside the raw
-   JSON, with a conformance verdict on every POST. It's the fastest proof the
-   whole chain works, before you wire the node into anything real. (It's a
-   shared sandbox: boxes are open by name and hold the last 50 readings, so pick
-   a distinctive name and send nothing private.) And to see a full,
-   live endpoint at work — our own gateways pushing right now — the
-   [Open Agriculture Technology Test Endpoint](https://iot-test.openagriculturetechnology.com/)
-   is open, no sign-in.
+4. **Watch it land.** Point the node at the live
+   [Open Agriculture Technology Test Endpoint](https://iot-test.openagriculturetechnology.com/) —
+   enter `http://iot-test.openagriculturetechnology.com/ingest` as the endpoint
+   URL (plain `http://` is by design: an ESP32 can't spare the memory for TLS,
+   and the oat1 signature is what keeps plain HTTP safe). Then open the console
+   and pick your farm — the gateway name you set at setup: **your gateway and
+   its sensors are there, live** — readings, charts, heartbeat. No account, no
+   registration; showing up in the data is the registration. It's a
+   proof-of-life bench (readings are kept about an hour): prove your chain
+   works, then point the node at an endpoint you keep. Want a per-message
+   schema verdict instead? The
+   [conformance sandbox](https://openagriculturetechnology.com/standard/test-endpoint/)
+   checks every POST against the standard.
 
 ## What a reading looks like
 

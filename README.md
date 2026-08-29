@@ -40,12 +40,15 @@ flowchart LR
 
 <p align="center"><img src="https://openagriculturetechnology.com/assets/img/store/components/esp32-board-family.jpg" alt="The ESP32 board family these sketches run on" width="360"></p>
 
-**See it running, right now.** The
-[Open Agriculture Technology Test Endpoint](https://iot-test.openagriculturetechnology.com/)
-is a live console where our own gateways (built from the sketches in this repo)
-are pushing readings as you read this. Open it — no sign-in. That console is
-what "an endpoint you own" can become, and everything in
-[`endpoint/`](endpoint/) helps you build yours.
+**Test your gateway, live.** Flash any sketch, enter
+`http://iot-test.openagriculturetechnology.com/ingest` as the node's endpoint
+URL, and open the
+[Open Agriculture Technology Test Endpoint](https://iot-test.openagriculturetechnology.com/):
+**your gateway and its sensors appear under your farm** — readings, charts,
+heartbeat — no account, no registration; showing up in the data *is* the
+registration. Our own nodes are on it right now. It's a proof-of-life bench
+(readings are kept about an hour): prove the chain works, then land your data
+somewhere you keep — starting with [`endpoint/`](endpoint/).
 
 The message format is [**oat-ods**](https://openagriculturetechnology.com/standard/) —
 one JSON envelope for every sensor, so your endpoint can't tell a $600 research
@@ -110,8 +113,8 @@ curl -s -X POST -H "Content-Type: application/json" --data-binary @batch.json \
 The response is a conformance verdict (`"conformant":2`), and your readings are
 waiting at `…/standard/test-endpoint/?box=YOUR-NAME`, parsed and raw. Then take
 the next rung: run a receiver yourself from [`endpoint/`](endpoint/) — Python or
-Node, the same contract. **See ours live → prove yours talks → run a receiver →
-build your own.**
+Node, the same contract. **Test your gateway on ours → check conformance in the
+sandbox → run a receiver → build your own.**
 
 ## What a reading looks like
 
