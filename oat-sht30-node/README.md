@@ -25,17 +25,14 @@ One sketch in the <a href="../">OAT Sketch Library</a> — they all share one se
 **Flash this sketch onto an ESP32 and the board becomes an air temperature +
 humidity gateway.** The node hosts its own setup page: join its Wi-Fi and
 configure everything in your browser — no app, no account, no code editing. It
-reads an **SHT-30** sensor over I²C — the SHT-30 has exactly two addresses, so
-one board can carry two sensors, inside and outside from one node — and pushes
-the readings as **oat-ods** to an endpoint you own, by webhook or MQTT. A live
+reads an **SHT-30** sensor over I²C — two parts, four wires — and pushes the
+readings as **oat-ods** to an endpoint you own, by webhook or MQTT. A live
 [Test Endpoint](https://iot-test.openagriculturetechnology.com/) is ready to
 catch your first reading ([Set it up](#set-it-up), step 4).
 
 ```mermaid
 flowchart LR
-  S1["SHT-30 @ 0x44<br>inside"] --- BUS
-  S2["SHT-30 @ 0x45<br>outside"] --- BUS["I²C bus<br>SDA 21 · SCL 22 · 3V3 · GND"]
-  BUS --> GW["ESP32 Gateway<br>(this firmware)"]
+  S1["SHT-30 sensor"] -- "I²C<br>SDA 21 · SCL 22 · 3V3 · GND" --> GW["ESP32 Gateway<br>(this firmware)"]
   GW -- "oat-ods over<br>webhook or MQTT" --> E["YOUR endpoint<br>on your LAN or your cloud"]
 ```
 
@@ -149,9 +146,11 @@ breakout that doesn't implement the serial command falls back to `sht30:0x44`.
 - **A sensor that stops answering is dropped from the live view**, rather than left
   showing its last reading in live-value type. An hours-old number presented as
   current is its own kind of lie. The failure detail replaces it.
-- **Two sensors, one node.** The SHT-30 has exactly two addresses, so `0x44` and
-  `0x45` each get their own stream id. Inside and outside from one board. The node
-  finds whichever are present at boot, and picks up one wired later.
+- **A second sensor is supported, documented on the site.** The SHT-30 has
+  exactly two addresses; the node finds whichever are present at boot and picks
+  up one wired later, each with its own stream. The wiring, and the cabled-probe
+  catch, are in the
+  [two-sensor guide](https://openagriculturetechnology.com/build/sketches/sht30-node/#two).
 - **Optional heater, with a confirmed off.** Off by default. For a sensor sitting
   in condensing air it pulses on a timer; samples during the pulse and for 30 s
   after are thrown away, because a heated sensor reads warm and dry. Turning it off
@@ -215,9 +214,11 @@ before it earns a button on the site.
 ## FAQ
 
 **Can one node read inside and outside at once?**
-Yes. The SHT-30 has exactly two I²C addresses — `0x44` (default) and `0x45`
-(ADDR pin tied to 3V3) — so two sensors share one board and each gets its own
-stream id. The node finds whichever are present at boot.
+Yes, two sensors can share one board — the SHT-30 has exactly two I²C
+addresses, and the node finds whichever are present at boot, each with its own
+stream. It takes one extra wire and has a real catch with cabled probes, so
+read the [two-sensor guide on the sketch's site page](https://openagriculturetechnology.com/build/sketches/sht30-node/#two)
+before wiring it.
 
 **Does it report dewpoint or VPD?**
 No — deliberately. The node reports what it observed (temperature, humidity);
