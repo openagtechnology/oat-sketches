@@ -1,0 +1,53 @@
+{
+  "schema": "oat-ods/0.3",
+  "$schema": "https://openagriculturetechnology.com/standard/oat-ods-0.3.schema.json",
+  "msg_type": "batch",
+  "sent_at": "2026-07-26T05:26:00Z",
+  "seq": 3000004,
+  "source": {
+    "tier": "oat-ds18b20-node",
+    "gateway_id": "walkin-1",
+    "farm_id": "riverbend-farm",
+    "fw": "OAT-DS18B20-Node/1.2.0"
+  },
+  "messages": [
+    {
+      "observed_at": "2026-07-26T05:26:00Z",
+      "stream": {
+        "id": "ds18b20:28f39296f0013cbd"
+      },
+      "measurement": "temperature",
+      "value": 3.44,
+      "unit": "Cel",
+      "agg": {
+        "window_s": 60,
+        "samples": 6,
+        "method": "mean"
+      },
+      "source": {
+        "physical_id": "ds18b20:28f39296f0013cbd",
+        "brand": "Analog Devices",
+        "model": "DS18B20"
+      }
+    },
+    {
+      "observed_at": "2026-07-26T05:26:00Z",
+      "stream": {
+        "id": "ds18s20:10ff0c2b7d1e4a11"
+      },
+      "measurement": "temperature",
+      "value": 2.19,
+      "unit": "Cel",
+      "agg": {
+        "window_s": 60,
+        "samples": 6,
+        "method": "mean"
+      },
+      "source": {
+        "physical_id": "ds18s20:10ff0c2b7d1e4a11",
+        "brand": "Analog Devices",
+        "model": "DS18S20"
+      }
+    }
+  ]
+}

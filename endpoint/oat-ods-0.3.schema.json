@@ -1,0 +1,383 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openagriculturetechnology.com/standard/oat-ods-0.3.schema.json",
+  "title": "OAT Observation Data Standard (oat-ods) v0.3",
+  "description": "One measurement per message. Logical stream is the primary key; physical source is swappable provenance. Three envelopes share this schema: a standalone observation, a node status/heartbeat, and a batch carrying many observations in one signed body. Consumers MUST ignore unknown fields (forward-compatibility).",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema",
+    "source"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "pattern": "^oat-ods/[0-9]+\\.[0-9]+$",
+      "description": "Format + version tag, e.g. oat-ods/0.3"
+    },
+    "$schema": {
+      "type": "string",
+      "format": "uri",
+      "description": "Optional pointer to this JSON Schema (self-description)."
+    },
+    "msg_type": {
+      "type": "string",
+      "enum": [
+        "observation",
+        "status",
+        "batch"
+      ],
+      "default": "observation",
+      "description": "observation (default) = one measurement. status = node liveness/health. batch = an envelope whose messages[] carries many observations in one body."
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "online",
+        "offline"
+      ],
+      "description": "Availability on a status message (Sparkplug-flavored liveness)."
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC instant the value was measured or the aggregate closed."
+    },
+    "stream": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id"
+      ],
+      "description": "Logical identity \u2014 the primary key. Survives hardware swaps.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable logical slot id (location/role). Defaults to the MAC if unassigned."
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-friendly label."
+        },
+        "location": {
+          "type": "string",
+          "description": "Free-text place / HA area."
+        }
+      }
+    },
+    "measurement": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Quantity kind from the oat-measurands.yaml dictionary (\u00a75). Open string (consumers MUST ignore unknown); a key the dictionary hasn't mapped is forwarded raw.",
+      "examples": [
+        "temperature",
+        "humidity",
+        "dewpoint",
+        "vpd",
+        "battery",
+        "rssi",
+        "soil_moisture",
+        "soil_conductivity",
+        "co2",
+        "pressure",
+        "illuminance",
+        "pm25",
+        "pm10",
+        "tvoc",
+        "voltage",
+        "contact",
+        "motion"
+      ]
+    },
+    "value": {
+      "type": [
+        "number",
+        "string",
+        "boolean"
+      ],
+      "description": "The reading."
+    },
+    "unit": {
+      "type": "string",
+      "description": "SenML unit symbol. Canonical units only on the wire (Cel, %RH, %, dBm, ppm, Pa, lx)."
+    },
+    "agg": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional aggregation metadata. Absent => instantaneous reading.",
+      "properties": {
+        "window_s": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "samples": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "mean",
+            "last",
+            "min",
+            "max",
+            "sum"
+          ]
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Physical provenance \u2014 swappable. At least one of gateway_id / physical_id is required.",
+      "anyOf": [
+        {
+          "required": [
+            "gateway_id"
+          ]
+        },
+        {
+          "required": [
+            "physical_id"
+          ]
+        }
+      ],
+      "properties": {
+        "tier": {
+          "type": "string",
+          "description": "Emitting tier, e.g. oat-ble-listener, home_assistant."
+        },
+        "gateway_id": {
+          "type": "string",
+          "description": "Assignable node identity (NOT the raw MAC)."
+        },
+        "farm_id": {
+          "type": "string",
+          "description": "The OPERATOR this node belongs to. One grower with ten nodes is one farm_id and ten gateway_ids \u2014 the grouping an endpoint needs to answer 'whose data is this?' without inferring it from node names."
+        },
+        "device_id": {
+          "type": "string",
+          "description": "Status message only: the node hardware id (efuse-MAC, e.g. oat-3c8a1fa77d14). Informative provenance \u2014 the node-level twin of physical_id; identity still keys on gateway_id."
+        },
+        "physical_id": {
+          "type": "string",
+          "description": "The hardware now filling the slot (MAC/serial)."
+        },
+        "brand": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "battery_pct": {
+          "type": "number"
+        },
+        "rssi": {
+          "type": "number"
+        }
+      }
+    },
+    "health": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Node self-report, carried on a status/heartbeat message (see contract 7.2).",
+      "properties": {
+        "uptime_s": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "boot_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reset": {
+          "type": "string",
+          "description": "Last reset reason (poweron|usb|panic|task_wdt|brownout|...); usb = post-flash reset on native-USB chips."
+        },
+        "free_heap": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "min_free_heap": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "largest_block": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rssi": {
+          "type": "number"
+        },
+        "wifi_reconnects": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "push_ok": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "push_fail": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "transport": {
+          "type": "string",
+          "enum": [
+            "https",
+            "http"
+          ]
+        },
+        "tls_ok": {
+          "type": "boolean"
+        },
+        "chip": {
+          "type": "string"
+        },
+        "temp_c": {
+          "type": "number",
+          "description": "Internal die temperature C (uncalibrated on classic ESP32)."
+        },
+        "loops_per_sec": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Main-loop rate; liveness/overwork signal."
+        },
+        "lan_ip": {
+          "type": "string",
+          "description": "Station IP on the site LAN \u2014 how to reach the node's setup page."
+        },
+        "ssid": {
+          "type": "string",
+          "description": "Wi-Fi network currently joined."
+        },
+        "mdns": {
+          "type": "string",
+          "description": "Reachable mDNS name, e.g. oat-gh2.local."
+        },
+        "ble_seen": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "BLE adverts heard since boot (BLE-tier nodes)."
+        },
+        "ble_decoded": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "BLE adverts decoded since boot."
+        },
+        "ble_matched": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "BLE adverts matched to a reportable sensor since boot."
+        }
+      }
+    },
+    "sent_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Batch envelope: when the body was sent. Each message keeps its own observed_at, which is the instant that matters for the series."
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Batch envelope: monotonic per-body sequence from the node, for replay detection. Resets are visible via the status message's boot_count."
+    },
+    "messages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/message"
+      },
+      "description": "Batch envelope: the observations. Required when msg_type is batch."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "msg_type"
+        ],
+        "properties": {
+          "msg_type": {
+            "const": "batch"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "messages"
+        ]
+      },
+      "else": {
+        "allOf": [
+          {
+            "required": [
+              "observed_at"
+            ]
+          },
+          {
+            "if": {
+              "required": [
+                "msg_type"
+              ],
+              "properties": {
+                "msg_type": {
+                  "const": "status"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "state"
+              ]
+            },
+            "else": {
+              "required": [
+                "stream",
+                "measurement",
+                "value"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "message": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "One observation inside a batch. Identical to a standalone observation except that the envelope keys (schema, msg_type, sent_at, seq) live on the envelope, and source may be partial because the envelope's source supplies the node-level fields.",
+      "required": [
+        "observed_at",
+        "stream",
+        "measurement",
+        "value"
+      ],
+      "properties": {
+        "observed_at": {
+          "$ref": "#/properties/observed_at"
+        },
+        "stream": {
+          "$ref": "#/properties/stream"
+        },
+        "measurement": {
+          "$ref": "#/properties/measurement"
+        },
+        "value": {
+          "$ref": "#/properties/value"
+        },
+        "unit": {
+          "$ref": "#/properties/unit"
+        },
+        "agg": {
+          "$ref": "#/properties/agg"
+        },
+        "source": {
+          "$ref": "#/properties/source"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+out/
+.pio/
+*.bin
+__pycache__/

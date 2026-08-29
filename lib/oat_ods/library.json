@@ -1,0 +1,13 @@
+{
+  "name": "oat_ods",
+  "version": "0.3.0",
+  "description": "OAT Observation Data Standard (oat-ods) encoder — the shared message module every OAT device sketch links. Native / SenML / flat / status encoders + Home Assistant MQTT discovery. A grower-grade profile of SenML (RFC 8428) + OGC SensorThings + Eclipse Sparkplug. Spec: Blueprint BP-16441.",
+  "keywords": "oat, sensor, iot, senml, mqtt, home-assistant, agriculture, sensorthings",
+  "license": "CC-BY-4.0",
+  "frameworks": "arduino",
+  "platforms": "espressif32",
+  "headers": "oat_ods.h",
+  "dependencies": [
+    { "owner": "bblanchon", "name": "ArduinoJson", "version": "^7.2.0" }
+  ]
+}

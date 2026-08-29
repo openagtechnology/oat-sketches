@@ -1,0 +1,29 @@
+{
+  "schema": "oat-ods/0.3",
+  "$schema": "https://openagriculturetechnology.com/standard/oat-ods-0.3.schema.json",
+  "msg_type": "observation",
+  "observed_at": "2026-07-26T05:26:00Z",
+  "stream": {
+    "id": "gh2-north-air",
+    "name": "GH2 North Bench Air",
+    "location": "Greenhouse 2 / North Bench"
+  },
+  "measurement": "temperature",
+  "value": 24.31,
+  "unit": "Cel",
+  "agg": {
+    "window_s": 60,
+    "samples": 28,
+    "method": "mean"
+  },
+  "source": {
+    "tier": "oat-ble-listener",
+    "gateway_id": "oat-greenhouse-2",
+    "farm_id": "riverbend-farm",
+    "physical_id": "A4:C1:38:0D:1E:2F",
+    "brand": "Govee",
+    "model": "H5075",
+    "battery_pct": 88,
+    "rssi": -78
+  }
+}

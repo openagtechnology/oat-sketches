@@ -1,0 +1,34 @@
+{
+  "schema": "oat-ods/0.3",
+  "$schema": "https://openagriculturetechnology.com/standard/oat-ods-0.3.schema.json",
+  "msg_type": "status",
+  "observed_at": "2026-07-26T05:26:00Z",
+  "state": "online",
+  "source": {
+    "tier": "oat-ds18b20-node",
+    "gateway_id": "walkin-1",
+    "farm_id": "riverbend-farm",
+    "device_id": "oat-20e7c8b4393c",
+    "fw": "OAT-DS18B20-Node/1.2.0"
+  },
+  "health": {
+    "uptime_s": 315,
+    "boot_count": 2,
+    "reset": "poweron",
+    "free_heap": 214800,
+    "min_free_heap": 203600,
+    "largest_block": 110592,
+    "rssi": -68,
+    "wifi_reconnects": 0,
+    "push_ok": 5,
+    "push_fail": 0,
+    "transport": "https",
+    "tls_ok": true,
+    "chip": "ESP32",
+    "temp_c": 54.4,
+    "loops_per_sec": 1120,
+    "lan_ip": "192.168.1.114",
+    "ssid": "BarnWiFi",
+    "mdns": "oat-walkin-1.local"
+  }
+}
