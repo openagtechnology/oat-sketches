@@ -21,9 +21,14 @@ One sketch in the <a href="../">OAT Sketch Library</a> — they all share one se
 
 ---
 
-A world of good sensors speak only analog: a voltage, or a 4–20 mA current loop.
-This node reads them cleanly through an **ADS1115** (a 16-bit I²C ADC), applies a
-per-channel **linear calibration**, and emits each as oat-ods. The site's
+**Flash this sketch onto an ESP32 and the board becomes an analog-sensor
+gateway.** The node hosts its own setup page: join its Wi-Fi and configure
+everything in your browser — no app, no account, no code editing. A world of
+good sensors speak only analog: a voltage, or a 4–20 mA current loop; this
+gateway reads them cleanly through an **ADS1115** (a 16-bit I²C ADC), applies
+a per-channel **linear calibration**, and emits each as oat-ods. A live
+[Test Endpoint](https://iot-test.openagriculturetechnology.com/) is ready to
+catch your first reading ([Setup](#setup), step 4). The site's
 [reading sensor outputs guide](https://openagriculturetechnology.com/technology/reading-sensor-outputs/)
 walks all five ways an ESP32 reads industrial sensors, analog and current-loop included.
 

@@ -21,9 +21,14 @@ One sketch in the <a href="../">OAT Sketch Library</a> — they all share one se
 
 ---
 
-Industrial sensors speak **Modbus over RS-485**: rugged, multi-drop, good over
-long noisy cable runs. This node reads their registers and pushes each as
-oat-ods — the bridge from the factory-floor bus into data you own. The site's
+**Flash this sketch onto an ESP32 and the board becomes a Modbus gateway.**
+The node hosts its own setup page: join its Wi-Fi and configure everything in
+your browser — no app, no account, no code editing. Industrial sensors speak
+**Modbus over RS-485**: rugged, multi-drop, good over long noisy cable runs;
+this gateway reads their registers and pushes each as oat-ods — the bridge
+from the factory-floor bus into data you own. A live
+[Test Endpoint](https://iot-test.openagriculturetechnology.com/) is ready to
+catch your first reading ([Setup](#setup), step 4). The site's
 [reading sensor outputs guide](https://openagriculturetechnology.com/technology/reading-sensor-outputs/)
 walks all five ways an ESP32 reads industrial sensors, Modbus included.
 

@@ -22,13 +22,18 @@ One sketch in the <a href="../">OAT Sketch Library</a> — they all share one se
 
 ---
 
-A self-configuring ESP32 node that listens for BLE sensor broadcasts — Govee,
-Xiaomi, Inkbird, Ruuvi, SwitchBot and ~120 other device types via
-[Theengs Decoder](https://decoder.theengs.io/) — harvests **every measurand each
-device emits** (temperature, humidity, soil moisture, conductivity, CO₂, PM2.5,
-illuminance, pressure, and the rest), folds the chatty readings into steady
-values, and pushes them to an endpoint the grower owns, by webhook or MQTT. No
-wiring, no pairing, no app: the sensors just broadcast, and this node listens.
+**Flash this sketch onto an ESP32 and the board becomes a Bluetooth-listening
+gateway.** The node hosts its own setup page: join its Wi-Fi and configure
+everything in your browser — no app, no account, no code editing. It listens
+for BLE sensor broadcasts — Govee, Xiaomi, Inkbird, Ruuvi, SwitchBot and ~120
+other device types via [Theengs Decoder](https://decoder.theengs.io/) —
+harvests **every measurand each device emits** (temperature, humidity, soil
+moisture, conductivity, CO₂, PM2.5, illuminance, pressure, and the rest),
+folds the chatty readings into steady values, and pushes them to an endpoint
+you own, by webhook or MQTT. No wiring, no pairing: the sensors just
+broadcast, and this gateway listens. A live
+[Test Endpoint](https://iot-test.openagriculturetechnology.com/) is ready to
+catch your first reading ([Set it up](#set-it-up), step 4).
 What each key means comes from the shared
 [measurand vocabulary](https://openagriculturetechnology.com/standard/reference/).
 

@@ -21,11 +21,16 @@ One sketch in the <a href="../">OAT Sketch Library</a> — they all share one se
 
 ---
 
-A plant tells you it's thirsty before it wilts: its canopy runs warmer than the
-air as stomata close. This node reads canopy temperature with a no-contact
+**Flash this sketch onto an ESP32 and the board becomes a canopy-temperature
+gateway.** The node hosts its own setup page: join its Wi-Fi and configure
+everything in your browser — no app, no account, no code editing. A plant
+tells you it's thirsty before it wilts: its canopy runs warmer than the air as
+stomata close. This gateway reads canopy temperature with a no-contact
 infrared thermometer pointed at the canopy — the agronomy behind the signal is
 on the site's [canopy stress page](https://openagriculturetechnology.com/grow/cwsi/) —
-and reports three measurements under one stream:
+and a live [Test Endpoint](https://iot-test.openagriculturetechnology.com/) is
+ready to catch your first reading ([Setup](#setup), step 4). It reports three
+measurements under one stream:
 
 ```mermaid
 flowchart LR

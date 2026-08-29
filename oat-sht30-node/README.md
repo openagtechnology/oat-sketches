@@ -22,10 +22,14 @@ One sketch in the <a href="../">OAT Sketch Library</a> — they all share one se
 
 ---
 
-A self-configuring ESP32 node that reads an **SHT-30** air temperature + humidity
-sensor over I²C and pushes the readings as **oat-ods** to an endpoint the grower
-owns, by webhook or MQTT. The SHT-30 has exactly two addresses, so one board can
-carry two sensors — inside and outside from one node.
+**Flash this sketch onto an ESP32 and the board becomes an air temperature +
+humidity gateway.** The node hosts its own setup page: join its Wi-Fi and
+configure everything in your browser — no app, no account, no code editing. It
+reads an **SHT-30** sensor over I²C — the SHT-30 has exactly two addresses, so
+one board can carry two sensors, inside and outside from one node — and pushes
+the readings as **oat-ods** to an endpoint you own, by webhook or MQTT. A live
+[Test Endpoint](https://iot-test.openagriculturetechnology.com/) is ready to
+catch your first reading ([Set it up](#set-it-up), step 4).
 
 ```mermaid
 flowchart LR

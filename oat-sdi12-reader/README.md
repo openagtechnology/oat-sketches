@@ -21,11 +21,17 @@ One sketch in the <a href="../">OAT Sketch Library</a> — they all share one se
 
 ---
 
-Professional [soil, water, and weather instruments](https://openagriculturetechnology.com/technology/research-grade-sensors/)
-speak **SDI-12**, the open digital bus that usually needs a costly datalogger. This node reads them directly
-— Apogee SQ-521, soil/water probes, weather sensors — and pushes each value to
-your endpoint by **webhook or MQTT**, no proprietary logger required. Reuses the
-shared [`oat_ods`](../lib/oat_ods/) encoder.
+**Flash this sketch onto an ESP32 and the board becomes an SDI-12 gateway.**
+The node hosts its own setup page: join its Wi-Fi and configure everything in
+your browser — no app, no account, no code editing. Professional
+[soil, water, and weather instruments](https://openagriculturetechnology.com/technology/research-grade-sensors/)
+speak **SDI-12**, the open digital bus that usually needs a costly datalogger;
+this gateway reads them directly — Apogee SQ-521, soil/water probes, weather
+sensors — and pushes each value to your endpoint by **webhook or MQTT**, no
+proprietary logger required. A live
+[Test Endpoint](https://iot-test.openagriculturetechnology.com/) is ready to
+catch your first reading ([Setup](#setup), step 4). Reuses the shared
+[`oat_ods`](../lib/oat_ods/) encoder.
 
 ```mermaid
 flowchart LR

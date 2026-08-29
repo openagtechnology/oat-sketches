@@ -21,10 +21,15 @@ One sketch in the <a href="../">OAT Sketch Library</a> — they all share one se
 
 ---
 
-The most honest irrigation signal is weight: a pot gets lighter as the plant
-drinks. This node weighs a pot or basket on a load cell (via an **HX711**), emits
-the readings as oat-ods, and runs a **local weigh-and-water loop**. One cheap
-build gives you two signals and an irrigation trigger:
+**Flash this sketch onto an ESP32 and the board becomes a weigh-and-water
+gateway.** The node hosts its own setup page: join its Wi-Fi and configure
+everything in your browser — no app, no account, no code editing. The most
+honest irrigation signal is weight: a pot gets lighter as the plant drinks.
+This gateway weighs a pot or basket on a load cell (via an **HX711**), emits
+the readings as oat-ods, and runs a **local weigh-and-water loop** — and a
+live [Test Endpoint](https://iot-test.openagriculturetechnology.com/) is ready
+to catch your first reading ([Setup](#setup), step 4). One cheap build gives
+you two signals and an irrigation trigger:
 
 ```mermaid
 flowchart LR
