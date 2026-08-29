@@ -38,12 +38,12 @@ is a live console built for exactly one thing: **testing an OAT gateway you
 just flashed.** Enter
 
 ```
-http://iot-test.openagriculturetechnology.com/ingest
+https://iot-test.openagriculturetechnology.com/ingest
 ```
 
-as the node's endpoint URL (plain `http://` is by design — an ESP32 can't
-spare the memory for TLS, and the oat1 signature over the body is what keeps
-plain HTTP safe). Open the console, pick your farm — the gateway name you set
+as the node's endpoint URL. (The push engine is HTTPS-preferred and falls back
+to signed HTTP on its own only if TLS won't fit the chip's memory — the oat1
+signature over the body keeps even that safe.) Open the console, pick your farm — the gateway name you set
 at setup — and there it is: **your gateway and its sensors, live** — readings,
 VPD charts, the 60-second heartbeat, fleet health. No account, no
 registration; showing up in the data *is* the registration. Go quiet for

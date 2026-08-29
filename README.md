@@ -41,7 +41,7 @@ flowchart LR
 <p align="center"><img src="https://openagriculturetechnology.com/assets/img/store/components/esp32-board-family.jpg" alt="The ESP32 board family these sketches run on" width="360"></p>
 
 **Test your gateway, live.** Flash any sketch, enter
-`http://iot-test.openagriculturetechnology.com/ingest` as the node's endpoint
+`https://iot-test.openagriculturetechnology.com/ingest` as the node's endpoint
 URL, and open the
 [Open Agriculture Technology Test Endpoint](https://iot-test.openagriculturetechnology.com/):
 **your gateway and its sensors appear under your farm** — readings, charts,
@@ -85,8 +85,10 @@ heartbeat, the same two-way USB console. Only the sensor read differs.
 2. Plug in the ESP32 and click **Install** (ESP Web Tools, straight from the browser).
 3. Join the node's own Wi-Fi (`OAT-…`), and its setup page walks you through
    Wi-Fi, delivery, and naming.
-4. Point delivery at the [test endpoint](https://openagriculturetechnology.com/standard/test-endpoint/)
-   and watch your first reading arrive.
+4. Enter `https://iot-test.openagriculturetechnology.com/ingest` as the
+   endpoint URL, open the
+   [Test Endpoint](https://iot-test.openagriculturetechnology.com/), and watch
+   your gateway and sensors appear under your farm.
 
 **Source sketches — build it yourself:**
 

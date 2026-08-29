@@ -82,9 +82,10 @@ breakout has them (typically 10 k); a bare chip does not — add 4.7 k–10 k.
    boot, and picks up one wired later.
 4. **Watch it land.** Point the node at the live
    [Open Agriculture Technology Test Endpoint](https://iot-test.openagriculturetechnology.com/) —
-   enter `http://iot-test.openagriculturetechnology.com/ingest` as the endpoint
-   URL (plain `http://` is by design: an ESP32 can't spare the memory for TLS,
-   and the oat1 signature is what keeps plain HTTP safe). Then open the console
+   enter `https://iot-test.openagriculturetechnology.com/ingest` as the endpoint
+   URL. (The push engine is HTTPS-preferred; if TLS ever won't fit the chip's
+   memory it falls back to signed HTTP on its own — the oat1 signature keeps
+   even that safe. You just enter the URL.) Then open the console
    and pick your farm — the gateway name you set at setup: **your gateway and
    its sensors are there, live** — readings, charts, heartbeat. No account, no
    registration; showing up in the data is the registration. It's a
