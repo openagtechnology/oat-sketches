@@ -22,7 +22,8 @@ The receiving half of the <a href="../">OAT Sketch Library</a>: same open
 
 An endpoint is just a small program that accepts what a gateway sends and keeps
 it — on a Raspberry Pi, a spare machine, or a cloud box; either way, yours. The
-trust ladder here has no gaps: **try ours → run ours → build your own.**
+trust ladder here has no gaps: **see ours live → prove yours talks → run a
+receiver → build your own.**
 
 ```mermaid
 flowchart LR
@@ -30,10 +31,18 @@ flowchart LR
   E --> U["Dashboards · alerts<br>records you keep"]
 ```
 
-## Try ours — prove it in two minutes
+## See one running
 
-OAT runs a live **[test endpoint](https://openagriculturetechnology.com/standard/test-endpoint/)** —
-a free public sandbox, no account needed. You don't even need hardware:
+The **[Open Agriculture Technology Test Endpoint](https://iot-test.openagriculturetechnology.com/)**
+is OAT's flagship: a live endpoint console with our own gateways pushing
+readings into it right now — open it, no sign-in. It's the proof that
+everything below is real, and the picture of what your own endpoint can grow
+into.
+
+## Prove yours talks — two minutes in the sandbox
+
+OAT also runs a **[conformance sandbox](https://openagriculturetechnology.com/standard/test-endpoint/)** —
+free, public, no account needed. You don't even need hardware:
 
 ```bash
 curl -s https://openagriculturetechnology.com/standard/samples/ods-batch.json -o batch.json

@@ -66,7 +66,10 @@ node's own captive portal handles the rest. No IDE needed — or build from sour
    JSON, with a conformance verdict on every POST. It's the fastest proof the
    whole chain works, before you wire the node into anything real. (It's a
    shared sandbox: boxes are open by name and hold the last 50 readings, so pick
-   a distinctive name and send nothing private.)
+   a distinctive name and send nothing private.) And to see a full,
+   live endpoint at work — our own gateways pushing right now — the
+   [Open Agriculture Technology Test Endpoint](https://iot-test.openagriculturetechnology.com/)
+   is open, no sign-in.
 
 ## What a reading looks like
 
