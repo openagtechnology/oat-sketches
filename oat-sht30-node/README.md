@@ -32,7 +32,7 @@ catch your first reading ([Set it up](#set-it-up), step 4).
 
 ```mermaid
 flowchart LR
-  S1["SHT-30 sensor"] -- "I²C<br>SDA 21 · SCL 22 · 3V3 · GND" --> GW["ESP32 Gateway<br>(this firmware)"]
+  S1["SHT-30 sensor"] -- "four wires<br>SDA 21 · SCL 22 · 3V3 · GND" --> GW["ESP32 Gateway<br>(this firmware)"]
   GW -- "oat-ods over<br>webhook or MQTT" --> E["YOUR endpoint<br>on your LAN or your cloud"]
 ```
 
