@@ -1,5 +1,5 @@
 /* =============================================================================
-   OAT BLE Sensor Listener  —  v2.0.2
+   OAT BLE Sensor Listener  —  v2.0.3
    OpenAgricultureTechnology.com  ·  the Sketch Library (Collect layer)
    -----------------------------------------------------------------------------
    Hears BLE sensors a grower already owns (Govee, Xiaomi, Inkbird, ATC and the rest
@@ -43,6 +43,11 @@
      reported in full.
 
    CHANGELOG
+     2.0.3  A device silent for ten minutes has its stream released and is shown as
+            silent (the LoRa Gateway's rule, adopted by every listener 2026-09-06):
+            a phone that walked through, or a sensor with a dead battery, no longer
+            holds a slot for the life of the node. It files straight back in when
+            heard again.
      2.0.2  Fix a boot loop introduced by the port: the display table's mutex was
             declared and never created, so the first advert decoded (or the first
             page render) took a NULL semaphore and FreeRTOS asserted --
@@ -70,8 +75,8 @@
 #include <decoder.h>
 
 #define TIER        "oat-ble-listener"
-#define FW_SEMVER   "2.0.2"
-#define FW_VERSION  "OAT-BLE-Listener/2.0.2"
+#define FW_SEMVER   "2.0.3"
+#define FW_VERSION  "OAT-BLE-Listener/2.0.3"
 #define NVS_NS      "oatble"          // unchanged, so a 1.4.x node keeps its settings
 
 #define BLE_SCAN_MS       5000        // length of each scan window (ms)
@@ -100,8 +105,10 @@ struct BleDev {
   char     model[20]= {0};
   int      rssi = 0;
   unsigned long lastSeenMs = 0;
+  bool     gone = false;              // silent past DEV_GONE_MS: slot released, row kept
   int      slot = -1;                 // its slot in the core's table
 };
+static const unsigned long DEV_GONE_MS = 10UL * 60UL * 1000UL;   // adverts come every few seconds
 static BleDev devs[MAX_BLE_DEVS];
 
 // The display table is written by the decode worker and read by the web pages and
@@ -182,7 +189,7 @@ void foldMeasurement(const char* mac, const char* name, const char* brand, const
     // A BLE sensor's MAC is its hardware id, so it IS the stream id (oat-ods §3/§4).
     // This is what the reference node always did; the core now enforces it for all.
     s.slot = oatcore::slotFor(mac, mac);
-  }
+  } else if (s.gone || s.slot < 0) { s.slot = oatcore::slotFor(s.mac, s.mac); s.gone = false; }   // back after silence
   if (name && name[0])   strncpy(s.name,  name,  sizeof(s.name)  - 1);
   if (brand && brand[0]) strncpy(s.brand, brand, sizeof(s.brand) - 1);
   if (model && model[0]) strncpy(s.model, model, sizeof(s.model) - 1);
@@ -347,7 +354,7 @@ static String statusHtml() {
     if (!s.used) continue;
     shown++;
     unsigned long age = (millis() - s.lastSeenMs) / 1000;
-    p += "<tr><td>" + String(s.mac) + (s.name[0] ? ("<br><span class='muted'>" + String(s.name) + "</span>") : "") +
+    p += "<tr><td>" + String(s.mac) + (s.gone ? " <span class='bad'>silent</span>" : "") + (s.name[0] ? ("<br><span class='muted'>" + String(s.name) + "</span>") : "") +
          "</td><td>" + String(s.model[0] ? s.model : "&mdash;") +
          "</td><td>" + String(s.rssi) + " dBm</td><td>" + String(age) + "s ago</td></tr>";
   }
@@ -375,7 +382,7 @@ static String statusText() {
   for (int i = 0; i < MAX_BLE_DEVS; i++) {
     BleDev &d = devs[i];
     if (!d.used) continue;
-    s += "device " + String(d.mac) + " " + String(d.model[0] ? d.model : "?") +
+    s += "device " + String(d.mac) + (d.gone ? " SILENT" : "") + " " + String(d.model[0] ? d.model : "?") +
          " rssi=" + String(d.rssi) + " last=" + String((millis() - d.lastSeenMs) / 1000) + "s ago\n";
   }
   devUnlock();
@@ -420,7 +427,21 @@ static const oatcore::Command COMMANDS[] = {
 // bending here; it did not.
 // ---------------------------------------------------------------------------
 static void sensorSample()   { }
-static void sensorCollect()  { }
+// A device silent for DEV_GONE_MS has its stream released and is shown as silent;
+// the row stays so it files straight back in when heard again.
+static void sensorCollect()  {
+  static unsigned long last = 0;
+  if (millis() - last < 5000) return;
+  last = millis();
+  devLock();
+  for (int i = 0; i < MAX_BLE_DEVS; i++) {
+    BleDev &d = devs[i];
+    if (!d.used || d.gone || millis() - d.lastSeenMs < DEV_GONE_MS) continue;
+    if (d.slot >= 0) oatcore::release(d.slot);
+    d.slot = -1; d.gone = true;
+  }
+  devUnlock();
+}
 static void sensorRescan()   { NimBLEDevice::getScan()->stop(); startBLE(); }
 
 static const oatcore::Driver DRIVER = {

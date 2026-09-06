@@ -1,0 +1,11 @@
+{
+  "name": "oat_lora",
+  "version": "1.0.0",
+  "description": "The OAT over-air frame for a private 915 MHz sensor LAN (UDP semantics on LoRa): header + codebook + builder/parser shared by the LoRa Field Node and the LoRa Gateway, and the RadioLib board wrapper for the Heltec WiFi LoRa 32 V2 (SX1276) and V3 (SX1262).",
+  "keywords": ["oat", "lora", "esp32", "sensor", "heltec"],
+  "frameworks": "arduino",
+  "platforms": "espressif32",
+  "dependencies": {
+    "jgromes/RadioLib": "^7.1.0"
+  }
+}

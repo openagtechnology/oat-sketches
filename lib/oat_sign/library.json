@@ -1,0 +1,9 @@
+{
+  "name": "oat_sign",
+  "version": "1.0.0",
+  "description": "OAT push signing — shared HMAC-SHA256 helper so every OAT sketch signs webhook pushes identically. Header-only; uses bundled mbedTLS.",
+  "keywords": "oat, hmac, signing, security, esp32",
+  "frameworks": "arduino",
+  "platforms": "espressif32",
+  "headers": "oat_sign.h"
+}

@@ -34,6 +34,8 @@ in one command, from this repo's [`endpoint/`](endpoint/) directory.
 flowchart LR
   S1[BLE sensors] --> GW
   S2[Wired probes<br>1-Wire · I2C · SDI-12<br>RS-485 · analog] --> GW
+  S3[Weather stations<br>433 / 915 MHz] --> GW
+  S4[LoRa field nodes<br>915 MHz, no Wi-Fi] --> GW
   GW["OAT Gateway<br>(one ESP32, this firmware)"] -- "oat-ods over<br>webhook or MQTT" --> E["YOUR endpoint<br>on your LAN or your cloud — either way, yours<br>Home Assistant (MQTT) · database · test bench"]
   E --> U[Dashboards · alerts<br>records you keep]
 ```
@@ -66,6 +68,9 @@ instrument from a $12 thermometer. It's all one stream of data you keep.
 | [**Analog & 4–20 mA Reader**](oat-analog-reader/) | The huge install base of analog and current-loop sensors | ADS1115 (I²C) | Source — build & flash |
 | [**CWSI Node**](oat-cwsi-node/) | Canopy temperature — the earliest water-stress signal — with a no-contact IR eye | MLX90614 (I²C) | Source — build & flash |
 | [**Load-Cell Watering Node**](oat-loadcell-water/) | Pot weight and water use, plus a local weigh-and-water loop | HX711 | Source — build & flash |
+| [**LoRa Field Node**](oat-lora-field-node/) | DS18B20, SHT-30, light and soil probes on one board, broadcast over private 915 MHz LoRa | 1-Wire · I²C · analog · LoRa | **Live** — [flash from the browser](https://openagriculturetechnology.com/build/sketches/lora-field-node/) |
+| [**LoRa Gateway**](oat-lora-gateway/) | Every LoRa Field Node in range, pushed as oat-ods; a pod port for a cabled listener | LoRa 915 MHz in · Wi-Fi out | **Live** — [flash from the browser](https://openagriculturetechnology.com/build/sketches/lora-gateway/) |
+| [**Weather-Station Listener**](oat-weather-listener/) | The AcuRite, La Crosse, Oregon and Ecowitt / Ambient stations you already own — ~220 rtl_433 device types | 433 / 915 MHz OOK (CC1101 or SX1276) | **Live** — [flash from the browser](https://openagriculturetechnology.com/build/sketches/weather-station-listener/) |
 
 **Status, honestly:** *Live* means compiled images are published and you can flash
 from the browser on the site — no IDE, no command line. *Source* means the code is
@@ -76,6 +81,8 @@ PlatformIO, below).
 core: the same captive-portal setup page, the same Wi-Fi flow, the same push
 engine (HTTPS-preferred, HMAC-signed, batched), the same 60-second health
 heartbeat, the same two-way USB console. Only the sensor read differs.
+
+Building one? Read [`docs/BUILDING.md`](docs/BUILDING.md) first: image naming, captions, what "tested" means, and the gotchas that cost a bench day.
 
 ## Quick start
 
@@ -146,11 +153,9 @@ sample payloads — lives in the
 ## Coming next
 
 Listed so the library shows its shape — not yet written:
-**915 MHz RF Listener** (Ecowitt/Fine Offset weather sensors via the rtl_433
-device universe) · **LoRa Field Node + LoRa Bridge** (point-to-point, no network
-server, no subscription) · **Soil-Moisture Node** (capacitive starter) ·
-**Rule-Driven Relay** (the Control-side conversation, with fail-safe defaults
-spelled out).
+**Soil-Moisture Node** (capacitive starter) · **Rule-Driven Relay** (the
+Control-side conversation, with fail-safe defaults spelled out). The
+915 MHz weather listener and the LoRa pair, once on this list, are live above.
 
 ## Repository layout
 
@@ -160,6 +165,7 @@ endpoint/            the receiving half: runnable receivers (Python/Node) + sche
 lib/oat_ods/         the shared oat-ods encoder + measurand vocabulary
 lib/oat_sign/        the shared HMAC push signer
 lib/oat_node_core/   the shared node core (config, Wi-Fi, portal, push engine)
+lib/oat_lora/        the LoRa over-air frame + codebook and the Heltec radio pin maps
 oat-node-template/   the starting point for a new sketch
 docs/                images and shared documentation
 ```
@@ -167,9 +173,11 @@ docs/                images and shared documentation
 ## Licensing
 
 - **Code:** [Apache-2.0](LICENSE) — use it, change it, sell what you build with it;
-  keep the notice. **Exception:** `oat-ble-listener/` depends on
-  [Theengs Decoder](https://decoder.theengs.io/) (GPL-family), so distributed
-  binaries of that one sketch inherit GPL obligations — its README says so plainly.
+  keep the notice. **Exceptions:** `oat-ble-listener/` depends on
+  [Theengs Decoder](https://decoder.theengs.io/) (GPL-family) and
+  `oat-weather-listener/` on [rtl_433_ESP](https://github.com/NorthernMan54/rtl_433_ESP)
+  (GPL-3.0), so distributed binaries of those two sketches inherit GPL
+  obligations — each README says so plainly.
 - **Documentation and text:** [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) —
   credit "Open Agriculture Technology (openagriculturetechnology.com)".
 - **The OAT name and logo** identify the project and aren't part of the code

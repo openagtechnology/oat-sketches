@@ -111,6 +111,19 @@ machine contract is published:
   every envelope field, documented, with the vocabulary of measurement names
   and SenML units.
 
+## Gateways that carry other sensors
+
+Some OAT gateways push readings that are not their own: the BLE Listener hears
+Bluetooth sensors; the LoRa Gateway hears LoRa Field Nodes, each carrying up to
+thirty probes. Your receiver needs nothing new. Every reading is still one
+observation under the *sensor's* own hardware id (`ds18b20:28ff…`,
+`sht30:0a1b…`), `source.rssi` / `source.battery` describe the thing that sent it,
+a LoRa field node also gets a stream of its own (its 8-hex unit id) with `rssi`,
+`snr`, `voltage` and `uptime`, and a sensor whose node goes silent simply stops
+appearing in batches. Treat a stream absent for three of its usual intervals as
+stale. The map from a serial number to a place is yours to hold — no node names
+anything, on purpose, so a probe keeps its history when it moves between nodes.
+
 ## FAQ
 
 **How do I write an endpoint to receive sensor readings over a webhook?**

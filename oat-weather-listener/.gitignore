@@ -1,0 +1,3 @@
+# PlatformIO build artifacts — the shippable bins are copied to the site assets.
+.pio/
+out/

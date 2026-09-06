@@ -184,6 +184,12 @@ sensors, scales, air-quality monitors. If a device's decoder key isn't in the
 vocabulary yet, the reading is forwarded raw and listed on the node's status
 page so it can be promoted.
 
+**What happens when a sensor stops broadcasting?**
+After ten silent minutes its stream is released and the status page marks it
+*silent*; a phone that walked past, or a sensor with a dead battery, never holds
+a slot for the life of the node. It files straight back in when heard again,
+under the same MAC, so its history at your endpoint is unbroken.
+
 **Can it watch only my sensors?**
 Yes — an optional allow-list of MAC addresses. Empty, it reports every device
 emitting a known physical measurement in earshot; filled, only yours.

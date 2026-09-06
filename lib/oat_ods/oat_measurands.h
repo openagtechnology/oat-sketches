@@ -29,7 +29,7 @@ struct Measurand {
   uint8_t     xform;        // MeasXform applied to the raw value
 };
 
-// 33 harvestable decoder keys, generated from 28 measurand rows.
+// 33 harvestable decoder keys, generated from 50 measurand rows.
 static const Measurand OAT_MEASURANDS[] = {
   {"tempc","temperature","Cel",KIND_CONTINUOUS,XF_NONE},
   {"tempf","temperature","Cel",KIND_CONTINUOUS,XF_F_TO_C},
