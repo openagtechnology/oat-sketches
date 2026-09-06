@@ -1,0 +1,9 @@
+{
+  "name": "oat_soil",
+  "version": "1.0.0",
+  "description": "OAT capacitive soil-moisture probe support: averaged ADC read, wire-off floor, per-probe two-point calibration kept by pin, one console/web grammar. Header-only; shared by the Soil-Moisture Node (oat_node_core) and the LoRa Field Node (standalone).",
+  "keywords": "oat, soil, capacitive, calibration, esp32",
+  "license": "Apache-2.0",
+  "frameworks": "arduino",
+  "platforms": "espressif32"
+}

@@ -1,5 +1,5 @@
 /* =============================================================================
-   OAT LoRa Field Node  —  v1.2.2
+   OAT LoRa Field Node  —  v1.3.0
    OpenAgricultureTechnology.com  ·  the Sketch Library (Collect layer)
    -----------------------------------------------------------------------------
    An ESP32 with a LoRa radio (Heltec WiFi LoRa 32 V2 or V3) reads the sensors
@@ -34,6 +34,13 @@
    the gateway holds the hardware-to-place map, where it survives a reflash.
 
    CHANGELOG
+     1.3.0  Per-probe soil calibration, shared with the Soil-Moisture Node through
+            lib/oat_soil: one dry/wet pair PER PIN, captured live at the bench
+            (`set cal 3 dry`, `set cal 3 wet`) or typed (`set cal 3 2876 1232`),
+            kept in NVS as the table `show` prints. The single soildry/soilwet
+            pair is gone, and so are its baked-in 2800/1200 defaults: a probe
+            with no calibration now sends its raw millivolts only, no percentage,
+            the same rule the wired node follows. Recalibrate after this update.
      1.2.2  Three from the 9/5 bench queue. (1) A board on USB with no cell read the
             charger rail (4.25 V) and reported battery 100 %: above 4.23 V the node
             now says mains (measurand 14 = 1, battery byte = none) and still sends
@@ -71,6 +78,7 @@
    ============================================================================= */
 
 #include <Preferences.h>
+#include <oat_soil.h>              // the read, the floor, the per-probe calibration (shared with the Soil-Moisture Node)
 #include <Wire.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -78,8 +86,8 @@
 #include <oat_lora_radio.h>
 #include <oat_lora_screen.h>
 
-#define FW_SEMVER   "1.2.2"
-#define FW_VERSION  "OAT-LoRa-Field-Node/1.2.2"
+#define FW_SEMVER   "1.3.0"
+#define FW_VERSION  "OAT-LoRa-Field-Node/1.3.0"
 #define NVS_NS      "oatlfn"
 
 #define MAX_DS      16
@@ -116,8 +124,7 @@ struct Config {
   int      scl       = DEF_SCL;
   int      lightPin  = DEF_LIGHT_PIN;
   String   soilPins  = DEF_SOIL_PINS;       // csv of GPIO; "" = none
-  int      soilDry   = 2800;                // mV the probe reads in dry air
-  int      soilWet   = 1200;                // mV the probe reads in water
+  String   soilCal   = "";                  // per-pin dry/wet table, "3:2876/1232 4:2610/1250"; "" = none
   int      battPin   = DEF_BATT_PIN;        // -1 = mains, report no battery
   int      battCtrl  = DEF_BATT_CTRL;
   int      podRx     = DEF_POD_RX;          // the serial pod port; -1 disables
@@ -144,8 +151,7 @@ static void loadConfig() {
   if (K("scl"))      cfg.scl      = prefs.getInt("scl", cfg.scl);
   if (K("lightpin")) cfg.lightPin = prefs.getInt("lightpin", cfg.lightPin);
   if (K("soilpins")) cfg.soilPins = prefs.getString("soilpins", cfg.soilPins);
-  if (K("soildry"))  cfg.soilDry  = prefs.getInt("soildry", cfg.soilDry);
-  if (K("soilwet"))  cfg.soilWet  = prefs.getInt("soilwet", cfg.soilWet);
+  if (K("soilcal"))  cfg.soilCal  = prefs.getString("soilcal", cfg.soilCal);
   if (K("battpin"))  cfg.battPin  = prefs.getInt("battpin", cfg.battPin);
   if (K("battctrl")) cfg.battCtrl = prefs.getInt("battctrl", cfg.battCtrl);
   if (K("podrx"))    cfg.podRx    = prefs.getInt("podrx", cfg.podRx);
@@ -161,7 +167,7 @@ static void saveConfig() {
   prefs.putUChar("sf", cfg.sf); prefs.putUChar("sync", cfg.sync); prefs.putChar("power", cfg.power);
   prefs.putInt("dspin", cfg.dsPin); prefs.putInt("sda", cfg.sda); prefs.putInt("scl", cfg.scl);
   prefs.putInt("lightpin", cfg.lightPin); prefs.putString("soilpins", cfg.soilPins);
-  prefs.putInt("soildry", cfg.soilDry); prefs.putInt("soilwet", cfg.soilWet);
+  prefs.putString("soilcal", cfg.soilCal);
   prefs.putInt("battpin", cfg.battPin); prefs.putInt("battctrl", cfg.battCtrl);
   prefs.putInt("podrx", cfg.podRx); prefs.putInt("podtx", cfg.podTx); prefs.putBool("lineout", cfg.lineout);
   prefs.end();
@@ -198,6 +204,9 @@ static Sht shts[2] = { {0x44, false, {0}, false, 0, 0, false}, {0x45, false, {0}
 
 static int soilPins[MAX_SOIL]; static int soilCount = 0;
 static int soilMv[MAX_SOIL]; static int lightMv = -1;
+static oatsoil::Table g_soilCal;                     // loaded from cfg.soilCal at boot
+static bool soilDeclared(int pin) { for (int i = 0; i < soilCount; i++) if (soilPins[i] == pin) return true; return false; }
+static bool soilPinOk(int pin, String& why) { if (pin <= 0 || pin > 48) { why = "pin must be 1-48"; return false; } why = "ok"; return true; }
 static float battV = 0;
 
 static uint8_t sht_crc8(const uint8_t* d, int n) {
@@ -251,14 +260,7 @@ static void parseSoilPins() {
     from = comma + 1;
   }
 }
-static int readMv(int pin) {
-  // The first read configures the pin as an ADC channel; attenuation can only be
-  // set after that. 11 dB gives the full 0-3.3 V range for the soil probes.
-  analogReadMilliVolts(pin);
-  analogSetPinAttenuation(pin, ADC_11db);
-  uint32_t mv = 0; for (int i = 0; i < 8; i++) mv += analogReadMilliVolts(pin);
-  return (int)(mv / 8);
-}
+static int readMv(int pin) { oatsoil::configurePin(pin); return oatsoil::readMv(pin); }
 
 static void sensorsBegin() {
   if (ds) { delete ds; ds = nullptr; } if (ow) { delete ow; ow = nullptr; }
@@ -307,11 +309,8 @@ static void sensorsRead() {
   }
 }
 
-static float soilPercent(int mv) {
-  float span = (float)(cfg.soilDry - cfg.soilWet); if (span == 0) return 0;
-  float pct = (cfg.soilDry - mv) / span * 100.0f;
-  return pct < 0 ? 0 : (pct > 100 ? 100 : pct);
-}
+// NAN until that pin has both calibration points: no calibration, no percentage.
+static float soilPercent(int pin, int mv) { return g_soilCal.percent(pin, mv); }
 
 // ---------------------------------------------------------------------------
 // The serial pod port. Anything that prints oat-line on this node's second UART
@@ -467,7 +466,7 @@ static void sendData() {
   for (int i = 0; i < dsCount; i++) if (dsProbes[i].ok) addOrFlush(SUB_DS0 + i, 1, dsProbes[i].t);
   for (int i = 0; i < 2; i++) if (shts[i].ok) { addOrFlush(SUB_SHT0 + i, 1, shts[i].t); addOrFlush(SUB_SHT0 + i, 2, shts[i].h); }
   if (lightMv >= 0) { if (lightMv >= ADC_FLOOR_MV) addOrFlush(SUB_ADC0, 4, lightMv / 3300.0 * 100.0); addOrFlush(SUB_ADC0, 5, lightMv); }
-  for (int i = 0; i < soilCount; i++) { if (soilMv[i] >= ADC_FLOOR_MV) addOrFlush(SUB_ADC0 + 1 + i, 3, soilPercent(soilMv[i])); addOrFlush(SUB_ADC0 + 1 + i, 5, soilMv[i]); }
+  for (int i = 0; i < soilCount; i++) { float pct = soilMv[i] >= ADC_FLOOR_MV ? soilPercent(soilPins[i], soilMv[i]) : NAN; if (!isnan(pct)) addOrFlush(SUB_ADC0 + 1 + i, 3, pct); addOrFlush(SUB_ADC0 + 1 + i, 5, soilMv[i]); }
   if (cfg.battPin >= 0 && battV > 0.5f) { addOrFlush(SUB_NODE, 6, battV); addOrFlush(SUB_NODE, 14, onMains(battV) ? 1 : 0); }
   addOrFlush(SUB_NODE, 13, millis() / 1000.0);
   // pod streams: encode each window by its kind, then clear it
@@ -497,7 +496,7 @@ static void printLines() {
     Serial.printf("S %s brand=Sensirion model=SHT30\nM %s temperature %.2f Cel c\nM %s humidity %.1f %%RH c\n", sid, sid, shts[i].t, sid, shts[i].h);
   }
   if (lightMv >= 0) { if (lightMv >= ADC_FLOOR_MV) Serial.printf("M %s:a%d light_level %.1f %% c\n", id, cfg.lightPin, lightMv / 33.0); Serial.printf("M %s:a%d analog_raw %d - c\n", id, cfg.lightPin, lightMv); }
-  for (int i = 0; i < soilCount; i++) { if (soilMv[i] >= ADC_FLOOR_MV) Serial.printf("M %s:a%d soil_moisture %.1f %% c\n", id, soilPins[i], soilPercent(soilMv[i])); Serial.printf("M %s:a%d analog_raw %d - c\n", id, soilPins[i], soilMv[i]); }
+  for (int i = 0; i < soilCount; i++) { float pct = soilMv[i] >= ADC_FLOOR_MV ? soilPercent(soilPins[i], soilMv[i]) : NAN; if (!isnan(pct)) Serial.printf("M %s:a%d soil_moisture %.1f %% c\n", id, soilPins[i], pct); Serial.printf("M %s:a%d analog_raw %d - c\n", id, soilPins[i], soilMv[i]); }
   if (cfg.battPin >= 0 && battV > 0.5f) Serial.printf("M %s voltage %.3f V g\nM %s mains %d - s\n", id, battV, id, onMains(battV) ? 1 : 0);
   Serial.printf("H %s %s uptime=%lu\n", id, FW_VERSION, (unsigned long)(millis() / 1000));
 }
@@ -553,7 +552,11 @@ static void printStatus() {
   for (int i = 0; i < 2; i++) if (shts[i].present) { Serial.printf("  0x%02x sub %u", shts[i].addr, SUB_SHT0 + i); if (shts[i].ok) Serial.printf(" %.2f C %.1f %%RH", shts[i].t, shts[i].h); }
   Serial.println(shts[0].present || shts[1].present ? "" : "  none found");
   Serial.printf("light pin %d: %d mV\n", cfg.lightPin, lightMv);
-  for (int i = 0; i < soilCount; i++) Serial.printf("soil pin %d sub %u: %d mV = %.0f %%\n", soilPins[i], SUB_ADC0 + 1 + i, soilMv[i], soilPercent(soilMv[i]));
+  for (int i = 0; i < soilCount; i++) {
+    float pct = soilMv[i] >= ADC_FLOOR_MV ? soilPercent(soilPins[i], soilMv[i]) : NAN;
+    String pctText = soilMv[i] < ADC_FLOOR_MV ? String("wire off") : (isnan(pct) ? String("no percentage") : String(pct, 0) + " %");
+    Serial.printf("soil pin %d sub %u: %d mV = %s (%s)\n", soilPins[i], SUB_ADC0 + 1 + i, soilMv[i], pctText.c_str(), g_soilCal.describe(soilPins[i]).c_str());
+  }
   if (onMains(battV)) Serial.printf("battery pin %d: %.2f V = mains (charger rail, no cell to report)\n", cfg.battPin, battV);
   else Serial.printf("battery pin %d: %.2f V (%u %%)\n", cfg.battPin, battV, battByte());
   Serial.printf("pod port rx %d tx %d: %s, %d stream(s), lines %lu bad %lu unknown-measurement %lu%s%s\n", cfg.podRx, cfg.podTx, g_podOn ? "open" : "off", podCount,
@@ -565,12 +568,13 @@ static void printStatus() {
 }
 static void printHelp() {
   Serial.println("commands: help | status | show | set <key> <value> | scan | read | tx | roster | reboot | factory");
-  Serial.println("keys: cadence(s) freq(MHz) bw(kHz) sf sync(hex) power(dBm) dspin sda scl lightpin soilpins(csv) soildry(mV) soilwet(mV) battpin battctrl podrx podtx lineout(on|off)");
+  Serial.println("keys: cadence(s) freq(MHz) bw(kHz) sf sync(hex) power(dBm) dspin sda scl lightpin soilpins(csv) cal battpin battctrl podrx podtx lineout(on|off)");
+  Serial.println("soil calibration, per probe, at the bench: set cal <pin> dry | set cal <pin> wet | set cal <pin> clear | set cal <pin> <dryMv> <wetMv>; no calibration = raw millivolts only");
   Serial.println("the radio keys must match the gateway; -1 disables a pin; analog pins are declared, never guessed");
 }
 static void printShow() {
-  Serial.printf("cadence=%u freq=%.1f bw=%.0f sf=%u sync=0x%02x power=%d dspin=%d sda=%d scl=%d lightpin=%d soilpins=%s soildry=%d soilwet=%d battpin=%d battctrl=%d podrx=%d podtx=%d lineout=%s\n",
-                cfg.cadence, cfg.freq, cfg.bw, cfg.sf, cfg.sync, cfg.power, cfg.dsPin, cfg.sda, cfg.scl, cfg.lightPin, cfg.soilPins.c_str(), cfg.soilDry, cfg.soilWet, cfg.battPin, cfg.battCtrl, cfg.podRx, cfg.podTx, cfg.lineout ? "on" : "off");
+  Serial.printf("cadence=%u freq=%.1f bw=%.0f sf=%u sync=0x%02x power=%d dspin=%d sda=%d scl=%d lightpin=%d soilpins=%s cal=%s battpin=%d battctrl=%d podrx=%d podtx=%d lineout=%s\n",
+                cfg.cadence, cfg.freq, cfg.bw, cfg.sf, cfg.sync, cfg.power, cfg.dsPin, cfg.sda, cfg.scl, cfg.lightPin, cfg.soilPins.c_str(), cfg.soilCal.length() ? cfg.soilCal.c_str() : "-", cfg.battPin, cfg.battCtrl, cfg.podRx, cfg.podTx, cfg.lineout ? "on" : "off");
 }
 static bool setKey(const String& k, const String& v) {
   bool radioChanged = false, pinsChanged = false;
@@ -585,8 +589,12 @@ static bool setKey(const String& k, const String& v) {
   else if (k == "scl")      { cfg.scl = v.toInt(); pinsChanged = true; }
   else if (k == "lightpin") { cfg.lightPin = v.toInt(); pinsChanged = true; }
   else if (k == "soilpins") { cfg.soilPins = v; pinsChanged = true; }
-  else if (k == "soildry")  { cfg.soilDry = v.toInt(); }
-  else if (k == "soilwet")  { cfg.soilWet = v.toInt(); }
+  else if (k == "cal" || k == "soilcal") {
+    String why;
+    if (!g_soilCal.apply(v, why, soilPinOk, soilDeclared)) { Serial.println(why); return false; }
+    cfg.soilCal = g_soilCal.toString();
+    Serial.printf("cal: %s\n", cfg.soilCal.length() ? cfg.soilCal.c_str() : "(none)");
+  }
   else if (k == "battpin")  { cfg.battPin = v.toInt(); }
   else if (k == "battctrl") { cfg.battCtrl = v.toInt(); }
   else if (k == "podrx")    { cfg.podRx = v.toInt(); saveConfig(); podBegin(); Serial.println(g_podOn ? "pod port open" : "pod port off"); return true; }
@@ -631,6 +639,7 @@ void setup() {
   delay(300);
   pinMode(PIN_LED, OUTPUT); digitalWrite(PIN_LED, LOW);
   loadConfig();
+  { String why; if (!g_soilCal.fromString(cfg.soilCal, why, nullptr)) { Serial.println("[OAT] stored soil calibration unreadable, cleared: " + why); cfg.soilCal = ""; } }
   g_unitId = unitIdFromMac();
   Serial.printf("\n[OAT] %s booting on %s, unit id %08lx\n", FW_VERSION, BOARD_NAME, (unsigned long)g_unitId);
   bool ok = radio.begin(planFromConfig());

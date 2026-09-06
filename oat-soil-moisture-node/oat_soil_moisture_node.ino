@@ -1,5 +1,5 @@
 /* =============================================================================
-   OAT Soil-Moisture Node  —  v1.1.0
+   OAT Soil-Moisture Node  —  v1.1.1
    OpenAgricultureTechnology.com  ·  the Sketch Library (Collect layer)
    -----------------------------------------------------------------------------
    Reads up to six capacitive soil-moisture probes on a classic ESP32's analog
@@ -52,6 +52,9 @@
      uses. Label the wire. Which pin is which pot is recorded at the endpoint.
 
    CHANGELOG
+     1.1.1  The read, the floor, the per-probe table and the calibration grammar
+            moved into lib/oat_soil (header-only) so the LoRa Field Node uses the
+            same implementation. No behaviour change here.
      1.1.0  ESP32-S3, C3 and C6 builds, each with its own ADC1 pin list, default
             pin and refusal reasons (Mark: "we are creators - create and be
             flexible"). Classic ESP32 unchanged. New chips are beta until a
@@ -72,10 +75,11 @@
 
 #include <oat_node_core.h>
 #include <oat_measurands.h>
+#include <oat_soil.h>              // the read, the floor, the per-probe calibration (shared)
 
 #define TIER        "oat-soil-moisture-node"
-#define FW_SEMVER   "1.1.0"
-#define FW_VERSION  "OAT-Soil-Moisture-Node/1.1.0"
+#define FW_SEMVER   "1.1.1"
+#define FW_VERSION  "OAT-Soil-Moisture-Node/1.1.1"
 #define NVS_NS      "oatsoil"
 
 #define MAX_PROBES    6            // per board, on every chip (the slot table is sized for it)
@@ -96,30 +100,25 @@
   #define CHIP_NAME     "classic ESP32"
   #define ADC_PINS_TEXT "32, 33, 34, 35, 36 or 39"
 #endif
-#define ADC_FLOOR_MV  150          // under this a pin is a wire off, not a wet probe
-#define ADC_SAMPLES   16           // averaged per read; the ADC is noisy, the soil is not
-#define CAL_MIN_SPAN  100          // dry and wet closer than this is not a calibration
+#define ADC_FLOOR_MV  oatsoil::FLOOR_MV   // under this a pin is a wire off, not a wet probe
+
+// Calibration lives in the shared table, kept by PIN, so re-ordering the pin list
+// or removing a pin and putting it back never hands one probe another's numbers.
+static oatsoil::Table g_cal;
 
 struct Probe {
   int      pin   = -1;
   int      slot  = -1;
   char     id[40] = {0};                  // "<device>:a35"
-  int      dryMv = 0, wetMv = 0;   // 0 = not captured
   int      lastMv = -1;
   float    lastPct = NAN;
   uint32_t reads = 0, dead = 0;    // dead = reads under the floor
-  bool     calibrated() const { return dryMv > 0 && wetMv > 0 && dryMv - wetMv >= CAL_MIN_SPAN; }
+  bool     calibrated() const { return g_cal.calibrated(pin); }
 };
 static Probe  probes[MAX_PROBES];
 static int    nProbes = 0;
 static String g_pins = DEFAULT_PINS;   // the declared list, as typed
 static String lastReadMsg = "no read yet";
-
-// Calibration is kept by PIN, not by probe index, so re-ordering the pin list or
-// removing a pin and putting it back never hands one probe another's numbers.
-struct Cal { int pin; int dryMv; int wetMv; };
-static Cal cals[MAX_PROBES];
-static int nCals = 0;
 
 // ---------------------------------------------------------------------------
 // Pins. Every wrong choice here fails looking like a broken probe, or worse,
@@ -154,28 +153,11 @@ static bool pinOkForAdc(int p, String& why) {
   return false;
 }
 
-static int readMv(int pin) {
-  uint32_t sum = 0;
-  for (int i = 0; i < ADC_SAMPLES; i++) sum += analogReadMilliVolts(pin);
-  return (int)(sum / ADC_SAMPLES);
-}
-
 static Probe* probeForPin(int pin) {
   for (int i = 0; i < nProbes; i++) if (probes[i].pin == pin) return &probes[i];
   return nullptr;
 }
-static Cal* calForPin(int pin, bool create) {
-  for (int i = 0; i < nCals; i++) if (cals[i].pin == pin) return &cals[i];
-  if (!create || nCals >= MAX_PROBES) return nullptr;
-  cals[nCals] = { pin, 0, 0 };
-  return &cals[nCals++];
-}
-
-static float percentOf(const Probe& p, int mv) {
-  float pct = (float)(p.dryMv - mv) / (float)(p.dryMv - p.wetMv) * 100.0f;
-  return pct < 0 ? 0 : (pct > 100 ? 100 : pct);
-}
-
+static bool isDeclared(int pin) { return probeForPin(pin) != nullptr; }
 // ---------------------------------------------------------------------------
 // The sensor actions
 // ---------------------------------------------------------------------------
@@ -195,15 +177,11 @@ static void sensorBegin() {
     Probe& p = probes[nProbes];
     p = Probe();
     p.pin = pin;
-    // The first read configures the pin as an ADC channel; attenuation can only be
-    // set after that. 11 dB gives the full 0-3.3 V range a probe on 3V3 produces.
-    analogReadMilliVolts(pin);
-    analogSetPinAttenuation(pin, ADC_11db);
+    oatsoil::configurePin(pin);
     snprintf(p.id, sizeof(p.id), "%s:a%d", oatcore::deviceId().c_str(), pin);
     p.slot = oatcore::slotFor(p.id, p.id);
     if (p.slot < 0) { Serial.printf("[soil] no slot left for GPIO %d\n", pin); continue; }
     oatcore::slotMeta(p.slot, "", "capacitive soil probe");   // no maker to name; naming one would be a guess
-    if (Cal* c = calForPin(pin, false)) { p.dryMv = c->dryMv; p.wetMv = c->wetMv; }
     nProbes++;
   }
   Serial.printf("[soil] %d probe pin(s) declared: %s\n", nProbes, g_pins.c_str());
@@ -214,7 +192,7 @@ static void sensorStartSample() {
   for (int i = 0; i < nProbes; i++) {
     Probe& p = probes[i];
     if (p.slot < 0) continue;
-    int mv = readMv(p.pin);
+    int mv = oatsoil::readMv(p.pin);
     p.lastMv = mv;
     if (mv < ADC_FLOOR_MV) {                   // a wire, not a probe: report nothing
       p.lastPct = NAN; p.dead++; off++;
@@ -224,10 +202,9 @@ static void sensorStartSample() {
     p.reads++; live++;
     oatcore::countRead(true, false);
     oatcore::fold(p.slot, "voltage", "V", oat::KIND_CONTINUOUS, mv / 1000.0);
-    if (p.calibrated()) {
-      p.lastPct = percentOf(p, mv);
-      oatcore::fold(p.slot, "soil_moisture", "%", oat::KIND_CONTINUOUS, p.lastPct);
-    } else { p.lastPct = NAN; uncal++; }
+    p.lastPct = g_cal.percent(p.pin, mv);            // NAN until both points exist
+    if (!isnan(p.lastPct)) oatcore::fold(p.slot, "soil_moisture", "%", oat::KIND_CONTINUOUS, p.lastPct);
+    else uncal++;
   }
   String m = String(live) + " probe(s) read";
   if (off)   m += ", " + String(off) + " under " + String(ADC_FLOOR_MV) + " mV (wire off?)";
@@ -267,10 +244,7 @@ static String sensorStatusHtml() {
       h += "<span class='big'>" + String(p.lastMv / 1000.0, 3) + " V</span> &nbsp; ";
       h += "<span class='big'>" + pctText(p) + "</span>";
     }
-    h += "<div class='muted'>";
-    if (p.calibrated()) h += "dry air " + String(p.dryMv) + " mV &middot; water " + String(p.wetMv) + " mV";
-    else if (p.dryMv || p.wetMv) h += "half calibrated: dry " + (p.dryMv ? String(p.dryMv) + " mV" : String("?")) + " &middot; water " + (p.wetMv ? String(p.wetMv) + " mV" : String("?")) + " &middot; sending voltage only";
-    else h += "not calibrated: sending voltage only, no percentage";
+    h += "<div class='muted'>" + g_cal.describe(p.pin) + (p.calibrated() ? "" : " &middot; sending voltage only, no percentage");
     h += " &middot; reads " + String(p.reads) + (p.dead ? " &middot; wire-off reads " + String(p.dead) : "") + "</div>";
     h += "<div class='muted'>Calibrate this probe: hold it in dry air, then <a href='#' onclick=\"return oatCal('" + String(p.pin) + " dry')\">this is dry air</a>; "
          "stand it in a glass of water to the line, then <a href='#' onclick=\"return oatCal('" + String(p.pin) + " wet')\">this is water</a>.</div></div>";
@@ -286,7 +260,7 @@ static String sensorStatusText() {
     s += "probe gpio " + String(p.pin) + " " + String(p.id) + " ";
     if (p.lastMv < 0) s += "no reading yet";
     else s += String(p.lastMv) + " mV = " + pctText(p);
-    s += p.calibrated() ? " (dry " + String(p.dryMv) + " / wet " + String(p.wetMv) + ")" : " (not calibrated)";
+    s += " (" + g_cal.describe(p.pin) + ")";
     s += " reads=" + String(p.reads) + " wireoff=" + String(p.dead) + "\n";
   }
   if (!nProbes) s += "probe: none declared; set pins " DEFAULT_PINS " (" CHIP_NAME ": " ADC_PINS_TEXT ")\n";
@@ -296,7 +270,7 @@ static String sensorStatusText() {
 static String sensorDiag() {
   if (!nProbes) return "no probe pins declared, so nothing was read";
   String d = "live millivolts:";
-  for (int i = 0; i < nProbes; i++) d += " gpio" + String(probes[i].pin) + "=" + String(readMv(probes[i].pin));
+  for (int i = 0; i < nProbes; i++) d += " gpio" + String(probes[i].pin) + "=" + String(oatsoil::readMv(probes[i].pin));
   d += ". Under " + String(ADC_FLOOR_MV) + " is a wire off; a v2.0 probe on 3V3 read about 2900 in dry air and about 1200 in water on the bench.";
   return d;
 }
@@ -328,89 +302,13 @@ static bool   setPins(const String& v, String& why) {
   return true;
 }
 
-static bool applyCals() {
-  for (int i = 0; i < nProbes; i++) {
-    Probe& p = probes[i];
-    Cal* c = calForPin(p.pin, false);
-    p.dryMv = c ? c->dryMv : 0; p.wetMv = c ? c->wetMv : 0;
-  }
-  return true;
-}
+static String getCal() { return g_cal.toString(); }
 
-static String calTable() {
-  String t;
-  for (int i = 0; i < nCals; i++) {
-    if (!cals[i].dryMv && !cals[i].wetMv) continue;
-    if (t.length()) t += " ";
-    t += String(cals[i].pin) + ":" + String(cals[i].dryMv) + "/" + String(cals[i].wetMv);
-  }
-  return t;
-}
-static String getCal() { return calTable(); }
-
-// Accepts the table it printed ("35:2480/1120 34:2610/1250"), so the form
+// Accepts the table it printed ("35:2876/1232 34:2610/1250"), so the form
 // round-trips; or a capture command from the links or the Console:
 //   <pin> dry | <pin> wet | <pin> clear | <pin> <dryMv> <wetMv>
-static bool setCal(const String& v, String& why) {
-  String s = v; s.trim();
-  if (!s.length()) { nCals = 0; return applyCals(); }           // an emptied field clears every calibration
-  if (s.indexOf(':') >= 0) {                              // the table form
-    Cal fresh[MAX_PROBES]; int n = 0;
-    int from = 0;
-    while (from < (int)s.length()) {
-      int sp = s.indexOf(' ', from); if (sp < 0) sp = s.length();
-      String tok = s.substring(from, sp); tok.trim();
-      from = sp + 1;
-      if (!tok.length()) continue;
-      int c = tok.indexOf(':'), sl = tok.indexOf('/');
-      if (c < 1 || sl < c) { why = "calibration entries look like 35:2480/1120"; return false; }
-      int pin = tok.substring(0, c).toInt(), dry = tok.substring(c + 1, sl).toInt(), wet = tok.substring(sl + 1).toInt();
-      if (!pinOkForAdc(pin, why)) return false;
-      if (dry && wet && dry - wet < CAL_MIN_SPAN) { why = "GPIO " + String(pin) + ": dry and wet are only " + String(dry - wet) + " mV apart; that is not two different states"; return false; }
-      if (n >= MAX_PROBES) { why = "too many calibration entries"; return false; }
-      fresh[n++] = { pin, dry, wet };
-    }
-    memcpy(cals, fresh, sizeof(fresh)); nCals = n;
-    return applyCals();
-  }
-  {                                                       // a command
-    int sp = s.indexOf(' ');
-    if (sp < 0) { why = "say which: '35 dry', '35 wet', '35 clear', or '35 2480 1120'"; return false; }
-    int pin = s.substring(0, sp).toInt();
-    String rest = s.substring(sp + 1); rest.trim();
-    if (!pinOkForAdc(pin, why)) return false;
-    if (rest == "clear") {
-      for (int i = 0; i < nCals; i++) if (cals[i].pin == pin) { cals[i] = cals[--nCals]; break; }
-      return applyCals();
-    }
-    Cal* c = calForPin(pin, true);
-    if (!c) { why = "no room for another calibration entry"; return false; }
-    if (rest == "dry" || rest == "wet") {
-      if (!probeForPin(pin)) { why = "GPIO " + String(pin) + " is not in the pin list; declare it first, then calibrate"; return false; }
-      int mv = readMv(pin);
-      if (mv < ADC_FLOOR_MV) { why = "GPIO " + String(pin) + " reads " + String(mv) + " mV: that is a wire off, not a probe. Check 3V3, GND and the output wire, then try again"; return false; }
-      if (rest == "dry") {
-        if (c->wetMv && mv - c->wetMv < CAL_MIN_SPAN) { why = "dry air read " + String(mv) + " mV, only " + String(mv - c->wetMv) + " above the water reading. Is the probe actually dry? Shake it off and wait a minute"; return false; }
-        c->dryMv = mv;
-      } else {
-        if (c->dryMv && c->dryMv - mv < CAL_MIN_SPAN) { why = "water read " + String(mv) + " mV, only " + String(c->dryMv - mv) + " below the dry reading. Is the probe in the water up to the line?"; return false; }
-        c->wetMv = mv;
-      }
-      Serial.printf("[soil] gpio %d %s = %d mV\n", pin, rest.c_str(), mv);
-      return applyCals();
-    }
-    int sp2 = rest.indexOf(' ');
-    if (sp2 > 0) {
-      int dry = rest.substring(0, sp2).toInt(), wet = rest.substring(sp2 + 1).toInt();
-      if (dry <= 0 || wet <= 0 || dry > 3300 || wet > 3300) { why = "millivolts, dry then wet, each between 1 and 3300"; return false; }
-      if (dry - wet < CAL_MIN_SPAN) { why = "dry and wet are only " + String(dry - wet) + " mV apart; that is not two different states"; return false; }
-      c->dryMv = dry; c->wetMv = wet;
-      return applyCals();
-    }
-    why = "say which: '35 dry', '35 wet', '35 clear', or '35 2480 1120'";
-    return false;
-  }
-}
+// The grammar, the live capture and every refusal live in oat_soil.h.
+static bool setCal(const String& v, String& why) { return g_cal.apply(v, why, pinOkForAdc, isDeclared); }
 
 static const oatcore::Field FIELDS[] = {
   { "pins", "Probe pins (GPIO, comma-separated)",
@@ -429,7 +327,7 @@ static void cmdRaw(const String& rest) {
   int n = rest.length() ? rest.toInt() : 1; if (n < 1) n = 1; if (n > 60) n = 60;
   for (int k = 0; k < n; k++) {
     String line = "[soil]";
-    for (int i = 0; i < nProbes; i++) line += " gpio" + String(probes[i].pin) + "=" + String(readMv(probes[i].pin)) + "mV";
+    for (int i = 0; i < nProbes; i++) line += " gpio" + String(probes[i].pin) + "=" + String(oatsoil::readMv(probes[i].pin)) + "mV";
     Serial.println(line);
     if (k + 1 < n) delay(1000);
   }

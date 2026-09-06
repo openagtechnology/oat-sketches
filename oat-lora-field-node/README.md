@@ -76,6 +76,12 @@ with each field sensor as its own stream.
    `scan` finds a probe wired since boot. **Analog pins are declared, never
    discovered** — `set lightpin 4` or `set soilpins 3,4` — because a floating ADC
    pin reads like a wet probe.
+   **Calibrate each soil probe at the bench**, before the node goes out: hold it
+   in dry air and `set cal 3 dry`, stand it in a glass of water to the line and
+   `set cal 3 wet`, using the probe's own GPIO. Every probe keeps its own pair
+   (`show` prints the table; `set cal 3 2876 1232` types one back in). A probe
+   with no calibration sends raw millivolts only, no percentage. The same code,
+   explained at length, is the [Soil-Moisture Node](../oat-soil-moisture-node/).
 4. Leave the radio plan at its defaults unless you changed them on the gateway:
    915.0 MHz · 125 kHz · SF7 · sync word `12`. `set cadence 120` changes the
    transmit interval (60 s floor). `tx` sends a frame now.

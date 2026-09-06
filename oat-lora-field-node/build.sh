@@ -31,7 +31,8 @@ src = ["oat_lora_field_node.ino", "platformio.ini", "merge_bin.py", "make_manife
 libs = ["../lib/oat_lora/oat_lora_frame.h", "../lib/oat_lora/oat_lora_radio.h", "../lib/oat_lora/library.json",
         "../lib/oat_ods/oat_ods.h", "../lib/oat_ods/oat_measurands.h", "../lib/oat_ods/library.json",
         "../lib/oat_sign/oat_sign.h", "../lib/oat_sign/library.json",
-        "../lib/oat_node_core/oat_node_core.h", "../lib/oat_node_core/oat_node_core.cpp", "../lib/oat_node_core/library.json"]
+        "../lib/oat_node_core/oat_node_core.h", "../lib/oat_node_core/oat_node_core.cpp", "../lib/oat_node_core/library.json",
+        "../lib/oat_soil/oat_soil.h", "../lib/oat_soil/library.json"]
 with zipfile.ZipFile(os.path.join(dst, "oat-lora-field-node-firmware.zip"), "w", zipfile.ZIP_DEFLATED) as z:
     for f in src:
         if os.path.exists(f): z.write(f, arcname="oat-lora-field-node/" + f)
