@@ -1,5 +1,5 @@
 /* =============================================================================
-   OAT BLE Sensor Listener  —  v2.0.3
+   OAT BLE Sensor Listener  —  v2.0.4
    OpenAgricultureTechnology.com  ·  the Sketch Library (Collect layer)
    -----------------------------------------------------------------------------
    Hears BLE sensors a grower already owns (Govee, Xiaomi, Inkbird, ATC and the rest
@@ -43,6 +43,9 @@
      reported in full.
 
    CHANGELOG
+     2.0.4  Core 1.2.1: a setting changed on the setup page now survives a reboot
+            (the core saved before applying driver fields, so the web page was one
+            save behind and a reboot reverted it). No behaviour change otherwise.
      2.0.3  A device silent for ten minutes has its stream released and is shown as
             silent (the LoRa Gateway's rule, adopted by every listener 2026-09-06):
             a phone that walked through, or a sensor with a dead battery, no longer
@@ -75,8 +78,8 @@
 #include <decoder.h>
 
 #define TIER        "oat-ble-listener"
-#define FW_SEMVER   "2.0.3"
-#define FW_VERSION  "OAT-BLE-Listener/2.0.3"
+#define FW_SEMVER   "2.0.4"
+#define FW_VERSION  "OAT-BLE-Listener/2.0.4"
 #define NVS_NS      "oatble"          // unchanged, so a 1.4.x node keeps its settings
 
 #define BLE_SCAN_MS       5000        // length of each scan window (ms)

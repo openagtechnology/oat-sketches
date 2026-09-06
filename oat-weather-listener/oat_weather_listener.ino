@@ -1,5 +1,5 @@
 /* =============================================================================
-   OAT Weather-Station Listener  —  v1.0.2
+   OAT Weather-Station Listener  —  v1.0.3
    OpenAgricultureTechnology.com  ·  the Sketch Library (Collect layer)
    -----------------------------------------------------------------------------
    Hears the weather stations and outdoor sensors a grower already owns — the
@@ -42,6 +42,9 @@
    that re-roll on battery change fragment their history and the page says so.
 
    CHANGELOG
+     1.0.3  Core 1.2.1: a setting changed on the setup page now survives a reboot
+            (the core saved before applying driver fields, so the web page was one
+            save behind and a reboot reverted it). No behaviour change otherwise.
      1.0.2  (1) The bare-receiver path still stamped 0 dBm on every stream's link
             metadata (1.0.1 only dropped the rssi measurement); no level is now
             "unset", and the table shows a dash. (2) A station that goes quiet for
@@ -66,8 +69,8 @@
 #endif
 
 #define TIER        "oat-weather-listener"
-#define FW_SEMVER   "1.0.2"
-#define FW_VERSION  "OAT-Weather-Listener/1.0.2"
+#define FW_SEMVER   "1.0.3"
+#define FW_VERSION  "OAT-Weather-Listener/1.0.3"
 #define NVS_NS      "oatwx"
 #ifndef OAT_BOARD_NAME
   #define OAT_BOARD_NAME "ESP32"

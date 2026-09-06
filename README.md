@@ -63,6 +63,7 @@ instrument from a $12 thermometer. It's all one stream of data you keep.
 | [**BLE Sensor Listener**](oat-ble-listener/) | Govee-class Bluetooth sensors — temperature, humidity, soil, CO₂, and ~120 device types | BLE (no wiring) | **Live** — [flash from the browser](https://openagriculturetechnology.com/build/sketches/ble-sensor-listener/) |
 | [**SHT-30 Node**](oat-sht30-node/) | Accurate air temperature + humidity, one or two sensors per board | I²C | **Live** — [flash from the browser](https://openagriculturetechnology.com/build/sketches/sht30-node/) |
 | [**DS18B20 Node**](oat-ds18b20-node/) | Sealed temperature probes, up to ten on a single wire | 1-Wire | **Live** — [flash from the browser](https://openagriculturetechnology.com/build/sketches/ds18b20-node/) |
+| [**Soil-Moisture Node**](oat-soil-moisture-node/) | Capacitive soil probes, up to six per board, each calibrated on the probe from the setup page | Analog (ADC1) | **Live** — [flash from the browser](https://openagriculturetechnology.com/build/sketches/soil-moisture-node/) |
 | [**SDI-12 Reader**](oat-sdi12-reader/) | Research-grade soil, water and weather instruments (Apogee, METER, Acclima…) | SDI-12 bus | Source — build & flash |
 | [**Modbus / RS-485 Reader**](oat-modbus-reader/) | Industrial Modbus RTU sensors, multi-drop over long runs | RS-485 | Source — build & flash |
 | [**Analog & 4–20 mA Reader**](oat-analog-reader/) | The huge install base of analog and current-loop sensors | ADS1115 (I²C) | Source — build & flash |
@@ -153,9 +154,9 @@ sample payloads — lives in the
 ## Coming next
 
 Listed so the library shows its shape — not yet written:
-**Soil-Moisture Node** (capacitive starter) · **Rule-Driven Relay** (the
+**Rule-Driven Relay** (the
 Control-side conversation, with fail-safe defaults spelled out). The
-915 MHz weather listener and the LoRa pair, once on this list, are live above.
+soil-moisture node, the 915 MHz weather listener and the LoRa pair, once on this list, are live above.
 
 ## Repository layout
 

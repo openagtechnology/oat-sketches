@@ -989,18 +989,22 @@ void handleSave() {
       rejected += m;                       // tell them WHY, don't silently drop the field
     }
   cfg.mq_tls = server.hasArg("mq_tls");
-  cfgSave();
   configTime(0, 0, cfg.ntp_server.c_str());
-  // Re-scan if the pin moved or the resolution changed — no reboot needed to fix a
-  // wiring typo, and a resolution change has to reach every probe on the wire.
-  // A driver field changed (a pin moved, a resolution changed): let the driver
-  // re-open its bus. No reboot needed to fix a wiring typo.
+  // A driver field changed (a pin moved, a resolution changed, a probe was
+  // calibrated): let the driver re-open its bus. No reboot needed to fix a wiring typo.
   for (int i = 0; i < g_drv->nFields; i++) {
     const Field &f = g_drv->fields[i];
     if (!server.hasArg(f.key)) continue;
     String why;
     if (!f.set(server.arg(f.key), why)) { if (rejected.length()) rejected += "<br>"; rejected += why; }
   }
+  // Persist AFTER the driver's fields are applied. cfgSave() writes each field's
+  // get(), so saving before set() wrote the PREVIOUS value: every driver field
+  // changed from the web page (an offset, a pin, a soil calibration) lived in RAM
+  // until the next save and vanished on reboot. The Console's `set` path always
+  // applied first and saved second; this path did not, from the day the core was
+  // extracted until a soil node lost its calibration on its fourth boot (2026-09-06).
+  cfgSave();
   String afterDriver;
   for (int i = 0; i < g_drv->nFields; i++) afterDriver += g_drv->fields[i].get() + "\x1f";
   if (afterDriver != beforeDriver && g_drv->rescan) g_drv->rescan();

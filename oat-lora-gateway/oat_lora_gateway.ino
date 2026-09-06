@@ -1,5 +1,5 @@
 /* =============================================================================
-   OAT LoRa Gateway  —  v1.1.3
+   OAT LoRa Gateway  —  v1.1.4
    OpenAgricultureTechnology.com  ·  the Sketch Library (Collect layer)
    -----------------------------------------------------------------------------
    The far-field twin of the BLE Listener. An ESP32 with a LoRa radio (Heltec WiFi
@@ -27,6 +27,9 @@
    endpoint owns the hardware-to-place map.
 
    CHANGELOG
+     1.1.4  Core 1.2.1: a setting changed on the setup page now survives a reboot
+            (the core saved before applying driver fields, so the web page was one
+            save behind and a reboot reverted it). No behaviour change otherwise.
      1.1.3  (1) Rosters persist through the core's blob door (oatcore::blobSave /
             blobLoad, core 1.2.0) instead of this sketch owning NVS; the sketch
             contract checker flagged 1.1.2 for including Preferences, and it was
@@ -64,8 +67,8 @@
 #include <oat_lora_screen.h>
 
 #define TIER        "oat-lora-gateway"
-#define FW_SEMVER   "1.1.3"
-#define FW_VERSION  "OAT-LoRa-Gateway/1.1.3"
+#define FW_SEMVER   "1.1.4"
+#define FW_VERSION  "OAT-LoRa-Gateway/1.1.4"
 #define NVS_NS      "oatlgw"
 
 // Table sizes. The campus defaults (32 nodes x 40 sensors, 96 slots) fit the S3;

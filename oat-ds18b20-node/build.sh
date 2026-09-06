@@ -37,7 +37,8 @@ src = ["oat_ds18b20_node.ino", "platformio.ini", "merge_bin.py",
        "make_manifest.py", "build.sh", "docker-build.sh", "README.md"]
 # Ship the shared libs too, or the downloaded project can't resolve ../lib.
 libs = ["../lib/oat_ods/oat_ods.h", "../lib/oat_ods/oat_measurands.h", "../lib/oat_ods/library.json",
-        "../lib/oat_sign/oat_sign.h", "../lib/oat_sign/library.json"]
+        "../lib/oat_sign/oat_sign.h", "../lib/oat_sign/library.json",
+        "../lib/oat_node_core/oat_node_core.h", "../lib/oat_node_core/oat_node_core.cpp", "../lib/oat_node_core/library.json"]
 with zipfile.ZipFile(os.path.join(dst, "oat-ds18b20-node-firmware.zip"), "w", zipfile.ZIP_DEFLATED) as z:
     for f in src:
         if os.path.exists(f): z.write(f, arcname="oat-ds18b20-node/" + f)

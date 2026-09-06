@@ -1,5 +1,5 @@
 /* =============================================================================
-   OAT SHT-30 Node  —  v2.0.6
+   OAT SHT-30 Node  —  v2.0.7
    OpenAgricultureTechnology.com  ·  the Sketch Library (Collect layer)
    -----------------------------------------------------------------------------
    Reads one or two SHT-30 air sensors over I2C and pushes temperature and humidity
@@ -24,6 +24,10 @@
      Skipping a reading beats sending one known to be wrong.
 
    CHANGELOG
+     2.0.7  Core 1.2.1: a setting changed in a driver field on the setup page (a pin,
+            an offset) now survives a reboot. The core saved before applying those
+            fields, so the web page was always one save behind and a reboot reverted
+            it. The Console's `set` was never affected. No sensor-code change.
      2.0.6  Rebuilt against the current core (the wired-node rssi fix and
             slotName landed after 2.0.5's binary was published, so the file on
             the site was two core commits behind its own source). No behaviour
@@ -45,8 +49,8 @@
 #include <Wire.h>
 
 #define TIER        "oat-sht30-node"
-#define FW_SEMVER   "2.0.6"
-#define FW_VERSION  "OAT-SHT30-Node/2.0.6"
+#define FW_SEMVER   "2.0.7"
+#define FW_VERSION  "OAT-SHT30-Node/2.0.7"
 #define NVS_NS      "oatsht"          // unchanged, so a 1.1.0 node keeps its settings
 
 #define DEFAULT_SDA       21          // see the pin note in pinOkForI2c below
