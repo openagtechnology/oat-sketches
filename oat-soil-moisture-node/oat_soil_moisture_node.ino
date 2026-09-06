@@ -1,5 +1,5 @@
 /* =============================================================================
-   OAT Soil-Moisture Node  —  v1.0.2
+   OAT Soil-Moisture Node  —  v1.1.0
    OpenAgricultureTechnology.com  ·  the Sketch Library (Collect layer)
    -----------------------------------------------------------------------------
    Reads up to six capacitive soil-moisture probes on a classic ESP32's analog
@@ -32,13 +32,19 @@
      one pin on the bench (35) and the operator declares the rest. A declared pin
      under ADC_FLOOR_MV is reported as a wire off, not as saturated soil.
 
-   WHY ONLY GPIO 32-39
-     The classic ESP32 has two ADC blocks. ADC2 (GPIO 0, 2, 4, 12-15, 25-27) is
-     shared with the Wi-Fi radio and stops answering the moment the radio is up,
-     which on this node is always. ADC1 is GPIO 32-39; 37 and 38 are not brought
-     out on a devkit. That leaves six pins, and six probes, and the setting refuses
-     any other pin with the reason, because a pin choice is persisted and
-     re-applied at every boot.
+   WHICH PINS, PER CHIP
+     Every ESP32 has two ADC blocks and only ADC1 keeps working while Wi-Fi is
+     up, which on this node is always. So the probe pins are ADC1 pins that are
+     not strapping, flash, USB or console pins, and the list is different on
+     every chip. Sources: Espressif's per-chip GPIO documentation and the
+     Arduino core's variant files.
+       classic ESP32  ADC1 = 32 33 34 35 36 39   (37/38 not on a devkit)   default 35
+       ESP32-S3       ADC1 = 1-10, minus 3 (strapping)                      default 4
+       ESP32-C3       ADC1 = 0-4,  minus 2 (strapping); 5 is ADC2           default 4
+       ESP32-C6       ADC1 = 0-6,  minus 4 and 5 (strapping)                default 6
+     The setting refuses any other pin with the reason, because a pin choice is
+     persisted and re-applied at every boot. Six probes per board on every chip:
+     the slot table is sized for six, and six is the story the page tells.
 
    STREAM IDENTITY
      A capacitive probe has no serial number. Its identity is the pin it is on, so
@@ -46,6 +52,10 @@
      uses. Label the wire. Which pin is which pot is recorded at the endpoint.
 
    CHANGELOG
+     1.1.0  ESP32-S3, C3 and C6 builds, each with its own ADC1 pin list, default
+            pin and refusal reasons (Mark: "we are creators - create and be
+            flexible"). Classic ESP32 unchanged. New chips are beta until a
+            reading from each has reached the Test Endpoint.
      1.0.2  Core 1.2.1: a calibration captured on the setup page now survives a
             reboot. The core saved settings BEFORE applying driver fields, so the two
             points lived in RAM only; the node lost them on its fourth boot and went
@@ -64,12 +74,28 @@
 #include <oat_measurands.h>
 
 #define TIER        "oat-soil-moisture-node"
-#define FW_SEMVER   "1.0.2"
-#define FW_VERSION  "OAT-Soil-Moisture-Node/1.0.2"
+#define FW_SEMVER   "1.1.0"
+#define FW_VERSION  "OAT-Soil-Moisture-Node/1.1.0"
 #define NVS_NS      "oatsoil"
 
-#define MAX_PROBES    6            // ADC1 pins on a classic ESP32: 32 33 34 35 36 39
-#define DEFAULT_PINS  "35"         // the bench wiring; declare more on the setup page
+#define MAX_PROBES    6            // per board, on every chip (the slot table is sized for it)
+#if   defined(CONFIG_IDF_TARGET_ESP32S3)
+  #define DEFAULT_PINS  "4"
+  #define CHIP_NAME     "ESP32-S3"
+  #define ADC_PINS_TEXT "1, 2, 4, 5, 6, 7, 8, 9 or 10"
+#elif defined(CONFIG_IDF_TARGET_ESP32C3)
+  #define DEFAULT_PINS  "4"
+  #define CHIP_NAME     "ESP32-C3"
+  #define ADC_PINS_TEXT "0, 1, 3 or 4"
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+  #define DEFAULT_PINS  "6"
+  #define CHIP_NAME     "ESP32-C6"
+  #define ADC_PINS_TEXT "0, 1, 2, 3 or 6"
+#else
+  #define DEFAULT_PINS  "35"         // the bench wiring; declare more on the setup page
+  #define CHIP_NAME     "classic ESP32"
+  #define ADC_PINS_TEXT "32, 33, 34, 35, 36 or 39"
+#endif
 #define ADC_FLOOR_MV  150          // under this a pin is a wire off, not a wet probe
 #define ADC_SAMPLES   16           // averaged per read; the ADC is noisy, the soil is not
 #define CAL_MIN_SPAN  100          // dry and wet closer than this is not a calibration
@@ -100,6 +126,21 @@ static int nCals = 0;
 // like a perfectly good one.
 // ---------------------------------------------------------------------------
 static bool pinOkForAdc(int p, String& why) {
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+  if (p >= 1 && p <= 10 && p != 3) { why = "ok"; return true; }
+  if (p == 3)                        why = "GPIO 3 is a strapping pin on the S3; a probe holding it high would change how the board boots";
+  else if (p >= 11 && p <= 20)       why = "GPIO " + String(p) + " is on ADC2, which stops working while Wi-Fi is on";
+  else                               why = "GPIO " + String(p) + " is not an analog input on an ESP32-S3; use " ADC_PINS_TEXT;
+#elif defined(CONFIG_IDF_TARGET_ESP32C3)
+  if (p >= 0 && p <= 4 && p != 2)  { why = "ok"; return true; }
+  if (p == 2)                        why = "GPIO 2 is a strapping pin on the C3; a probe holding it high would change how the board boots";
+  else if (p == 5)                   why = "GPIO 5 is the C3's only ADC2 pin, which stops working while Wi-Fi is on";
+  else                               why = "GPIO " + String(p) + " is not an analog input on an ESP32-C3; use " ADC_PINS_TEXT;
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+  if (p >= 0 && p <= 6 && p != 4 && p != 5) { why = "ok"; return true; }
+  if (p == 4 || p == 5)              why = "GPIO " + String(p) + " is a strapping pin on the C6; a probe holding it high would change how the board boots";
+  else                               why = "GPIO " + String(p) + " is not an analog input on an ESP32-C6; use " ADC_PINS_TEXT;
+#else
   if (p == 32 || p == 33 || p == 34 || p == 35 || p == 36 || p == 39) { why = "ok"; return true; }
   if (p == 0 || p == 2 || p == 4 || (p >= 12 && p <= 15) || (p >= 25 && p <= 27))
     why = "GPIO " + String(p) + " is on ADC2, which stops working while Wi-Fi is on";
@@ -108,7 +149,8 @@ static bool pinOkForAdc(int p, String& why) {
   else if (p == 37 || p == 38)
     why = "GPIO 37 and 38 are not brought out on a classic ESP32 devkit";
   else
-    why = "GPIO " + String(p) + " is not an analog input; use 32, 33, 34, 35, 36 or 39";
+    why = "GPIO " + String(p) + " is not an analog input; use " ADC_PINS_TEXT;
+#endif
   return false;
 }
 
@@ -211,7 +253,7 @@ static String pctText(const Probe& p) {
 
 static String sensorStatusHtml() {
   String h;
-  if (!nProbes) return "<p class='bad'>No probe pins declared. Enter the GPIO the probe's output is on (32, 33, 34, 35, 36 or 39) above.</p>";
+  if (!nProbes) return "<p class='bad'>No probe pins declared. Enter the GPIO the probe's output is on (" ADC_PINS_TEXT " on " CHIP_NAME ") above.</p>";
   h += "<script>function oatCal(c){var i=document.querySelector(\"input[name=cal]\");"
        "if(!i){location.href='/';return false;}"
        "var a=c.split(' ');if(!confirm('Record the live reading on GPIO '+a[0]+' as '+(a[1]=='dry'?'DRY AIR':'WATER')+'?'))return false;"
@@ -247,7 +289,7 @@ static String sensorStatusText() {
     s += p.calibrated() ? " (dry " + String(p.dryMv) + " / wet " + String(p.wetMv) + ")" : " (not calibrated)";
     s += " reads=" + String(p.reads) + " wireoff=" + String(p.dead) + "\n";
   }
-  if (!nProbes) s += "probe: none declared; set pins 35 (or 32,33,34,36,39)\n";
+  if (!nProbes) s += "probe: none declared; set pins " DEFAULT_PINS " (" CHIP_NAME ": " ADC_PINS_TEXT ")\n";
   return s;
 }
 
@@ -277,7 +319,7 @@ static bool   setPins(const String& v, String& why) {
     int pin = tok.toInt();
     if (!pinOkForAdc(pin, why)) return false;
     for (int i = 0; i < n; i++) if (seen[i] == pin) { why = "GPIO " + String(pin) + " is listed twice"; return false; }
-    if (n >= MAX_PROBES) { why = "six probes is the limit: a classic ESP32 has six usable analog pins"; return false; }
+    if (n >= MAX_PROBES) { why = "six probes is the limit on one board"; return false; }
     seen[n++] = pin;
     if (clean.length()) clean += ",";
     clean += String(pin);
@@ -372,7 +414,7 @@ static bool setCal(const String& v, String& why) {
 
 static const oatcore::Field FIELDS[] = {
   { "pins", "Probe pins (GPIO, comma-separated)",
-    "The pin each probe's output wire is on. 35 is the default; 32, 33, 34, 36 and 39 are the others that work with Wi-Fi on. Nothing is discovered: a pin you do not list is not read.",
+    "The pin each probe's output wire is on. On " CHIP_NAME ": " ADC_PINS_TEXT " (the default is " DEFAULT_PINS "); these are the analog pins that keep working with Wi-Fi on. Nothing is discovered: a pin you do not list is not read.",
     getPins, setPins },
   { "cal",  "Calibration",
     "Filled in by the two links under each probe below, and kept here as pin:dry/wet millivolts. You can also type a line: <code>35 dry</code>, <code>35 wet</code>, <code>35 clear</code>, or <code>35 2480 1120</code>. Until a probe has both points it sends its voltage only.",

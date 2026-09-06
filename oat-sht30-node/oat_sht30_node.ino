@@ -1,5 +1,5 @@
 /* =============================================================================
-   OAT SHT-30 Node  —  v2.0.7
+   OAT SHT-30 Node  —  v2.1.0
    OpenAgricultureTechnology.com  ·  the Sketch Library (Collect layer)
    -----------------------------------------------------------------------------
    Reads one or two SHT-30 air sensors over I2C and pushes temperature and humidity
@@ -24,6 +24,12 @@
      Skipping a reading beats sending one known to be wrong.
 
    CHANGELOG
+     2.1.0  ESP32-S3, C3 and C6 builds, each with its own I2C default pair and
+            per-chip pin guard (the DS18B20 node's chip rules, applied to a bus
+            that idles high). Classic ESP32 unchanged at 21/22. S3 uses the
+            Arduino core's 8/9; the C3's Arduino default is 8/9 too, but those are
+            strapping pins on that chip, so the C3 defaults to 6/7; the C6 uses its
+            core's 23/22. New chips are beta until each has reached the endpoint.
      2.0.7  Core 1.2.1: a setting changed in a driver field on the setup page (a pin,
             an offset) now survives a reboot. The core saved before applying those
             fields, so the web page was always one save behind and a reboot reverted
@@ -49,12 +55,31 @@
 #include <Wire.h>
 
 #define TIER        "oat-sht30-node"
-#define FW_SEMVER   "2.0.7"
-#define FW_VERSION  "OAT-SHT30-Node/2.0.7"
+#define FW_SEMVER   "2.1.0"
+#define FW_VERSION  "OAT-SHT30-Node/2.1.0"
 #define NVS_NS      "oatsht"          // unchanged, so a 1.1.0 node keeps its settings
 
-#define DEFAULT_SDA       21          // see the pin note in pinOkForI2c below
-#define DEFAULT_SCL       22
+// The default I2C pair, per chip: the Arduino core's own SDA/SCL where those are
+// safe, and a free pair where the core's choice lands on a strapping pin (the C3).
+#if   defined(CONFIG_IDF_TARGET_ESP32S3)
+  #define DEFAULT_SDA     8
+  #define DEFAULT_SCL     9
+  #define CHIP_NAME       "ESP32-S3"
+#elif defined(CONFIG_IDF_TARGET_ESP32C3)
+  #define DEFAULT_SDA     6
+  #define DEFAULT_SCL     7
+  #define CHIP_NAME       "ESP32-C3"
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+  #define DEFAULT_SDA     23
+  #define DEFAULT_SCL     22
+  #define CHIP_NAME       "ESP32-C6"
+#else
+  #define DEFAULT_SDA     21          // see the pin note in pinOkForI2c below
+  #define DEFAULT_SCL     22
+  #define CHIP_NAME       "classic ESP32"
+#endif
+#define STR_(x) #x
+#define STR(x)  STR_(x)
 #define I2C_HZ            100000      // 100 kHz — the forgiving speed on a long wire
 
 #define MAX_SHT           2           // the SHT-30 has exactly two addresses
@@ -111,6 +136,27 @@ static String        lastReadMsg = "no read yet";
 // which is exactly the pull that flips one into the wrong boot mode; 1/3 are the
 // USB console; 34-39 are input-only and can never drive a bidirectional bus.
 static bool pinOkForI2c(int p, String& why) {
+#if defined(CONFIG_IDF_TARGET_ESP32C3)
+  if (p < 0 || p > 21)              { why = "pin must be 0-21 on an ESP32-C3"; return false; }
+  if (p >= 12 && p <= 17)           { why = "GPIO 12-17 are the SPI flash this firmware runs from"; return false; }
+  if (p == 18 || p == 19)           { why = "GPIO 18 and 19 are the USB port you flash and talk to it through"; return false; }
+  if (p == 20 || p == 21)           { why = "GPIO 20 and 21 are UART0"; return false; }
+  if (p == 2 || p == 8 || p == 9)   { why = "GPIO " + String(p) + " is a strapping pin; an idle-high bus would change how the board boots"; return false; }
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+  if (p < 0 || p > 30)              { why = "pin must be 0-30 on an ESP32-C6"; return false; }
+  if (p >= 24 && p <= 30)           { why = "GPIO 24-30 are the SPI flash this firmware runs from"; return false; }
+  if (p == 12 || p == 13)           { why = "GPIO 12 and 13 are the USB port you flash and talk to it through"; return false; }
+  if (p == 16 || p == 17)           { why = "GPIO 16 and 17 are UART0"; return false; }
+  if (p == 4 || p == 5 || p == 8 || p == 9 || p == 15)
+                                    { why = "GPIO " + String(p) + " is a strapping pin; an idle-high bus would change how the board boots"; return false; }
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+  if (p < 0 || p > 48)              { why = "pin must be 0-48 on an ESP32-S3"; return false; }
+  if (p >= 26 && p <= 37)           { why = "GPIO 26-37 belong to the flash and PSRAM"; return false; }
+  if (p == 19 || p == 20)           { why = "GPIO 19 and 20 are the USB port you flash and talk to it through"; return false; }
+  if (p == 43 || p == 44)           { why = "GPIO 43 and 44 are UART0"; return false; }
+  if (p == 0 || p == 3 || p == 45 || p == 46)
+                                    { why = "GPIO " + String(p) + " is a strapping pin; an idle-high bus would change how the board boots"; return false; }
+#else
   if (p < 0 || p > 39)              { why = "pin must be 0-39 on a classic ESP32"; return false; }
   if (p >= 6 && p <= 11)            { why = "GPIO 6-11 are the flash chip this firmware runs from"; return false; }
   if (p >= 34)                      { why = "GPIO 34-39 are input-only and cannot drive a bus"; return false; }
@@ -119,6 +165,7 @@ static bool pinOkForI2c(int p, String& why) {
                                     { why = "GPIO " + String(p) + " is a strapping pin; an idle-high bus would change how the board boots"; return false; }
   if (p == 20 || p == 24 || (p >= 28 && p <= 31))
                                     { why = "GPIO " + String(p) + " is not brought out on a classic ESP32"; return false; }
+#endif
   why = "ok";
   return true;
 }
@@ -567,7 +614,7 @@ static bool   setHeatMin(const String& v, String& why) {
 }
 
 static const oatcore::Field FIELDS[] = {
-  { "sda",     "I2C SDA pin", "Defaults 21 and 22 on a classic ESP32. Change only if your board differs.", getSda, setSda },
+  { "sda",     "I2C SDA pin", "Defaults " STR(DEFAULT_SDA) " and " STR(DEFAULT_SCL) " on " CHIP_NAME ". Change only if your board differs.", getSda, setSda },
   { "scl",     "I2C SCL pin", "", getScl, setScl },
   { "t_off",   "Temperature offset (&deg;C)", "Added to every reading. Use it to line this node up against a reference you trust.", getToff, setToff },
   { "h_off",   "Humidity offset (%RH)", "", getHoff, setHoff },

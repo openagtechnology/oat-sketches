@@ -14,7 +14,7 @@ One sketch in the <a href="../">OAT Sketch Library</a> — they all share one se
 <p align="center">
   <img src="https://img.shields.io/badge/status-flash_from_the_browser-6a994e" alt="Status: live, flash from the browser">
   <img src="https://img.shields.io/badge/interface-analog_·_capacitive_probe-0969da" alt="Interface: analog, capacitive soil probe">
-  <img src="https://img.shields.io/badge/chips-ESP32_(bench--verified)-555" alt="Chips: classic ESP32, bench-verified">
+  <img src="https://img.shields.io/badge/chips-ESP32_·_S3_·_C3_·_C6-555" alt="Chips: classic ESP32 (bench-verified), S3, C3, C6 (beta)">
   <img src="https://img.shields.io/badge/schema-oat--ods%2F0.3-6a994e" alt="Schema: oat-ods/0.3">
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0">
   <a href="https://openagriculturetechnology.com/build/sketches/soil-moisture-node/"><img src="https://img.shields.io/badge/site-sketch_page-333" alt="Site: sketch page"></a>
@@ -49,20 +49,27 @@ the site page installs it over USB via ESP Web Tools (Chrome or Edge), and the
 node's own setup page handles the rest. No IDE needed — or build from source
 (below), if that's more your speed.
 
-## Wiring (classic ESP32)
+## Wiring
 
 | Probe | ESP32 |
 |---|---|
-| VCC | **3V3** (not 5 V: the output must stay under what the chip can read) |
+| VCC | **3V3** (5 V adds nothing: the probe's output is 0–3 V either way) |
 | GND | GND |
-| AOUT | **GPIO 35** (the default); 32, 33, 34, 36 or 39 for more probes |
+| AOUT | the first probe pin for your board, below |
 
-**Why only 32–39.** The classic ESP32 has two ADC blocks. ADC2 (GPIO 0, 2, 4,
-12–15, 25–27) is shared with the Wi-Fi radio and stops answering the moment the
-radio is up — which on this node is always. ADC1 is GPIO 32–39; 37 and 38 are not
-brought out on a devkit. Six pins, six probes. The pin setting refuses anything
-else, with the reason, because a pin choice is persisted and re-applied at every
-boot.
+| Board | First probe | More probes (six per board) | Bench status |
+|---|---|---|---|
+| Classic ESP32 | **GPIO 35** | 34, 32, 33, 36, 39 | tested |
+| ESP32-S3 | **GPIO 4** | 1, 2, 5, 6, 7, 8, 9, 10 | beta |
+| ESP32-C3 | **GPIO 4** | 0, 1, 3 | beta |
+| ESP32-C6 | **GPIO 6** | 0, 1, 2, 3 | beta |
+
+**Why those pins.** Every ESP32 has two ADC blocks and only ADC1 keeps working
+while Wi-Fi is up — which on this node is always. The lists above are each chip's
+ADC1 pins minus its strapping pins (3 on the S3, 2 on the C3, 4 and 5 on the C6),
+which a probe would hold high at power-on; on the classic, 37 and 38 are not
+brought out on a devkit. The pin setting refuses anything else, with the reason,
+because a pin choice is persisted and re-applied at every boot.
 
 **Analog is declared, never discovered.** A DS18B20 announces its serial and an
 SHT-30 answers at its address, but a pin with nothing on it floats at a few

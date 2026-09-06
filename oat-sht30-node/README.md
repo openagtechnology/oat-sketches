@@ -14,7 +14,7 @@ One sketch in the <a href="../">OAT Sketch Library</a> — they all share one se
 <p align="center">
   <img src="https://img.shields.io/badge/status-flash_from_the_browser-6a994e" alt="Status: live, flash from the browser">
   <img src="https://img.shields.io/badge/interface-I²C_·_SHT--30-0969da" alt="Interface: I2C SHT-30">
-  <img src="https://img.shields.io/badge/chips-ESP32_(bench--verified)-555" alt="Chips: classic ESP32, bench-verified">
+  <img src="https://img.shields.io/badge/chips-ESP32_·_S3_·_C3_·_C6-555" alt="Chips: classic ESP32 (bench-verified), S3, C3, C6 (beta)">
   <img src="https://img.shields.io/badge/schema-oat--ods%2F0.3-6a994e" alt="Schema: oat-ods/0.3">
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0">
   <a href="https://openagriculturetechnology.com/build/sketches/sht30-node/"><img src="https://img.shields.io/badge/site-sketch_page-333" alt="Site: sketch page"></a>
@@ -48,17 +48,24 @@ the site page installs it over USB via ESP Web Tools (Chrome or Edge), and the
 node's own setup page handles the rest. No IDE needed — or build from source
 (below), if that's more your speed.
 
-## Wiring (classic ESP32)
+## Wiring
 
 | SHT-30 | ESP32 |
 |---|---|
 | VIN / VCC | **3V3** (not 5 V unless the breakout regulates) |
 | GND | GND |
-| SDA | **GPIO 21** |
-| SCL | **GPIO 22** |
+| SDA | the SDA pin for your board, below |
+| SCL | the SCL pin for your board, below |
 | ADDR | open = `0x44` · tied to 3V3 = `0x45` (a second sensor) |
 
-**Why 21 and 22.** GPIO 6–11 are the SPI flash the firmware runs from. GPIO
+| Board | SDA | SCL | Bench status |
+|---|---|---|---|
+| Classic ESP32 | **GPIO 21** | **GPIO 22** | tested |
+| ESP32-S3 | **GPIO 8** | **GPIO 9** | beta |
+| ESP32-C3 | **GPIO 6** | **GPIO 7** (the core's 8/9 are strapping pins on the C3) | beta |
+| ESP32-C6 | **GPIO 23** | **GPIO 22** | beta |
+
+**Why 21 and 22 on the classic.** GPIO 6–11 are the SPI flash the firmware runs from. GPIO
 0/2/12/15 are strapping pins, and an I²C bus idles high through its pull-ups,
 which is exactly the pull that flips one into the wrong boot mode. GPIO 1/3 are
 UART0, the USB console. GPIO 34–39 are input-only with no pull-ups, so they can
