@@ -40,6 +40,7 @@
 #pragma once
 #include <Arduino.h>
 #include <oat_measurands.h>
+#include <oat_ods.h>          // oat::NO_RSSI is part of the driver API (slotLink)
 
 namespace oatcore {
 
@@ -153,7 +154,7 @@ void slotName(int slot, const char* name);
 // Link metadata for a radio sensor: latest wins. -1 leaves a value unset, which is
 // how a mains-powered wired sensor says "battery does not apply to me" rather than
 // claiming 0%.
-void slotLink(int slot, int rssi, int battery_pct);
+void slotLink(int slot, int rssi, int battery_pct);   // rssi oat::NO_RSSI (or -1) = no level; battery -1 = none
 
 int  slotCount();                      // slots currently claimed
 const char* slotId(int slot);          // for a driver's own status rendering

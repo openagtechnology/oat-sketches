@@ -712,9 +712,9 @@ void pushAll() {
     for (int i = 0; i < nItems; i++) {
       OutItem &it = items[i];
       if (it.brand[0] || it.model[0]) Serial.printf("S %s brand=%s model=%s\n", it.stream, it.brand[0] ? it.brand : "-", it.model[0] ? it.model : "-");
-      if (it.rssi != 0 || it.battery_pct >= 0) {
+      if (it.rssi != oat::NO_RSSI || it.battery_pct >= 0) {
         Serial.printf("L %s", it.stream);
-        if (it.rssi != 0) Serial.printf(" rssi=%d", it.rssi);
+        if (it.rssi != oat::NO_RSSI) Serial.printf(" rssi=%d", it.rssi);
         if (it.battery_pct >= 0) Serial.printf(" battery=%d", it.battery_pct);
         Serial.print("\n");
       }
@@ -1607,8 +1607,11 @@ void slotMeta(int slot, const char* brand, const char* model) {
   if (model && model[0]) strncpy(slots[slot].model, model, sizeof(slots[slot].model) - 1);
 }
 
+// "No level" is oat::NO_RSSI, the slot's default. -1 is accepted as the same
+// thing: two drivers used it for "unset" and the batch carried rssi:-1 (1.2.2).
 void slotLink(int slot, int rssi, int battery_pct) {
   if (slot < 0 || slot >= MAX_SLOTS || !slots[slot].used) return;
+  if (rssi == -1) rssi = oat::NO_RSSI;
   slots[slot].rssi = rssi;
   slots[slot].battery_pct = battery_pct;
 }

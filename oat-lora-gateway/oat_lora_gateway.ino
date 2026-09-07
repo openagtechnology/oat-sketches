@@ -27,6 +27,10 @@
    endpoint owns the hardware-to-place map.
 
    CHANGELOG
+     1.1.5  Core 1.2.2: a pod that reports no signal level no longer reaches the
+            endpoint as rssi -1 (the pod port passed -1 for "unset"; the core's
+            "no level" is oat::NO_RSSI and the line output now omits it). Text
+            and provenance only, no behaviour change on the radio.
      1.1.4  Core 1.2.1: a setting changed on the setup page now survives a reboot
             (the core saved before applying driver fields, so the web page was one
             save behind and a reboot reverted it). No behaviour change otherwise.
@@ -67,8 +71,8 @@
 #include <oat_lora_screen.h>
 
 #define TIER        "oat-lora-gateway"
-#define FW_SEMVER   "1.1.4"
-#define FW_VERSION  "OAT-LoRa-Gateway/1.1.4"
+#define FW_SEMVER   "1.1.5"
+#define FW_VERSION  "OAT-LoRa-Gateway/1.1.5"
 #define NVS_NS      "oatlgw"
 
 // Table sizes. The campus defaults (32 nodes x 40 sensors, 96 slots) fit the S3;
@@ -365,7 +369,7 @@ static void podLine(char* line) {
       if (!strncmp(tok[i], "rssi=", 5)) { p->rssi = atoi(tok[i] + 5); p->haveRssi = true; }
       else if (!strncmp(tok[i], "battery=", 8)) batt = atoi(tok[i] + 8);
     }
-    oatcore::slotLink(p->slot, p->haveRssi ? p->rssi : -1, batt);
+    oatcore::slotLink(p->slot, p->haveRssi ? p->rssi : oat::NO_RSSI, batt);
   } else if (!strcmp(tok[0], "H")) {
     // the pod's own heartbeat: shown, not filed
   } else { g_podBad++; }

@@ -1,6 +1,6 @@
 {
   "name": "oat_node_core",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Everything an OAT node does except talk to its sensor: config + NVS, the shared field registry behind both the web form and the serial Console, WiFi/AP/captive portal with connect-then-confirm, mDNS, the setup and status pages, the two-way USB Console, the oat-ods push engine (https preferred, signed http fallback, HMAC, batch envelope, heap-sized chunking), the 60 s heartbeat, and the measurand window fold. A sketch supplies a Driver and nothing else.",
   "keywords": ["oat", "oat-ods", "esp32", "sensor", "node"],
   "frameworks": "arduino",

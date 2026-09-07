@@ -1,5 +1,5 @@
 /* =============================================================================
-   OAT Weather-Station Listener  —  v1.0.5
+   OAT Weather-Station Listener  —  v1.0.6
    OpenAgricultureTechnology.com  ·  the Sketch Library (Collect layer)
    -----------------------------------------------------------------------------
    Hears the weather stations and outdoor sensors a grower already owns — the
@@ -46,6 +46,20 @@
    that re-roll on battery change fragment their history and the page says so.
 
    CHANGELOG
+     1.0.6  Bench 2026-09-07 (Iris on the bare receiver, 1.0.5: parity held, six
+            frames in 203 s, HTTP 200). Four small things from that run:
+            (1) Repeats dropped. The 5-in-1 sends every message three times back
+            to back; each was folded, so samples and frames read three per
+            transmission. A frame identical to the previous one from the same
+            station within two seconds is now counted as a repeat and skipped.
+            Same rule on the rtl_433 path (identical decoded values).
+            (2) Allow-list is an exact match on ids, comma-separated; it was a
+            substring test, so acurite-5n1:271 admitted 2716 and 2719.
+            (3) The console `status` text carries frames, bad checksum, bad
+            parity and repeats for the bare-receiver path; they were web-only.
+            (4) No signal level is passed to the core as oat::NO_RSSI; -1 went
+            out on the line output as rssi=-1 and in the batch as rssi:-1.
+            Core 1.2.2.
      1.0.5  (1) Station table recycles: a new station arriving when every row is
             taken now takes over the row that has been silent longest (its stream
             was already released), instead of being dropped without a word. The
@@ -88,8 +102,8 @@
 #endif
 
 #define TIER        "oat-weather-listener"
-#define FW_SEMVER   "1.0.5"
-#define FW_VERSION  "OAT-Weather-Listener/1.0.5"
+#define FW_SEMVER   "1.0.6"
+#define FW_VERSION  "OAT-Weather-Listener/1.0.6"
 #define NVS_NS      "oatwx"
 #ifndef OAT_BOARD_NAME
   #define OAT_BOARD_NAME "ESP32"
@@ -208,16 +222,25 @@ static const char* brandFor(const String& model) {
 // Stations heard — the display table. The core holds the readings; this holds
 // who they came from.
 // ---------------------------------------------------------------------------
-struct Station { bool used; char sid[ID_LEN]; char model[32]; int rssi; bool haveRssi; bool gone; unsigned long lastMs; uint32_t frames; int slot; };
+struct Station { bool used; char sid[ID_LEN]; char model[32]; int rssi; bool haveRssi; bool gone; unsigned long lastMs; uint32_t frames; int slot; uint32_t lastHash; unsigned long lastHashMs; };
+#define REPEAT_WINDOW_MS 2000UL   // a station's repeats are back to back; its next real message is 16 s or more away
+static uint32_t g_repeats = 0;
 static Station stations[MAX_STATIONS];
 static SemaphoreHandle_t stMutex = nullptr;
 static inline void stLock()   { if (stMutex) xSemaphoreTake(stMutex, portMAX_DELAY); }
 static inline void stUnlock() { if (stMutex) xSemaphoreGive(stMutex); }
 
+// Exact match on whole ids, comma-separated, case-insensitive.
 static bool allowed(const char* sid) {
   if (!g_allow.length()) return true;
-  String hay = g_allow; hay.toLowerCase(); String n = sid; n.toLowerCase();
-  return hay.indexOf(n) >= 0;
+  int from = 0;
+  while (from <= (int)g_allow.length()) {
+    int to = g_allow.indexOf(',', from); if (to < 0) to = g_allow.length();
+    String tok = g_allow.substring(from, to); tok.trim();
+    if (tok.length() && tok.equalsIgnoreCase(sid)) return true;
+    from = to + 1;
+  }
+  return false;
 }
 static void noteUnmapped(const char* key) {
   if (!key || !key[0] || strstr(g_unmapped, key)) return;
@@ -281,11 +304,29 @@ static void onDecoded(char* message) {
   stUnlock();
   if (slot < 0) return;
 
+  // Repeat test: the same station saying the same thing within two seconds is
+  // a repeat (the 5-in-1 sends each message three times), not a new reading.
+  uint32_t h = 2166136261u;
+  for (JsonPair kv : o) {
+    const char* k = kv.key().c_str();
+    if (isMeta(k)) continue;
+    for (const char* c = k; *c; c++) { h ^= (uint8_t)*c; h *= 16777619u; }
+    double dv = kv.value().is<double>() || kv.value().is<long>() ? kv.value().as<double>() : (kv.value().is<bool>() ? (kv.value().as<bool>() ? 1.0 : 0.0) : 0.0);
+    uint64_t bits; memcpy(&bits, &dv, sizeof(bits));
+    for (int i = 0; i < 8; i++) { h ^= (uint8_t)(bits >> (8 * i)); h *= 16777619u; }
+  }
+  stLock();
+  bool repeat = (stations[d].lastHash == h) && (millis() - stations[d].lastHashMs < REPEAT_WINDOW_MS);
+  if (repeat) { stations[d].frames--; g_repeats++; }
+  else { stations[d].lastHash = h; stations[d].lastHashMs = millis(); }
+  stUnlock();
+  if (repeat) return;
+
   oatcore::slotMeta(slot, brandFor(model), model);
   int battPct = -1;
   if (!o["battery"].isNull() && o["battery"].is<int>()) battPct = o["battery"].as<int>();
   if (!o["battery_pct"].isNull()) battPct = o["battery_pct"].as<int>();
-  oatcore::slotLink(slot, haveRssi ? rssi : -1, battPct);   // -1 = unset: a bare receiver has no level
+  oatcore::slotLink(slot, haveRssi ? rssi : oat::NO_RSSI, battPct);   // no level on a bare receiver
 
   for (JsonPair kv : o) {
     const char* k = kv.key().c_str();
@@ -475,7 +516,7 @@ static void wxRescan()  { if (g_radioOk) radioRetune(); }
 
 static String statusHtml() {
 #ifdef OAT_RX_DATAPIN
-  String p = "<div class='muted'>Bare 433 MHz receiver on GPIO " + String(OAT_RX_DATAPIN) + " &middot; AcuRite 5-in-1 decoder &middot; frames " + String(dp_frames) + ", bad checksum " + String(dp_badcrc) + ", bad parity " + String(dp_badparity) + " &middot; " + String(OAT_BOARD_NAME) + "</div>";
+  String p = "<div class='muted'>Bare 433 MHz receiver on GPIO " + String(OAT_RX_DATAPIN) + " &middot; AcuRite 5-in-1 decoder &middot; frames " + String(dp_frames) + ", bad checksum " + String(dp_badcrc) + ", bad parity " + String(dp_badparity) + ", repeats " + String(g_repeats) + " &middot; " + String(OAT_BOARD_NAME) + "</div>";
 #else
   String p = "<div class='muted'>Radio " + String(g_radioOk ? "listening" : "NOT STARTED") + " &middot; " + String(g_freq, 2) + " MHz &middot; " + String(OOK_MODULATION ? "OOK" : "FSK") + " &middot; " + String(OAT_BOARD_NAME) + "</div>";
 #endif
@@ -494,7 +535,10 @@ static String statusHtml() {
   return p;
 }
 static String statusText() {
-  String s = "wx radio=" + String(g_radioOk ? "listening" : "off") + " freq=" + String(g_freq, 2) + " decoded=" + String(g_decoded) + " skipped=" + String(g_skipped) + "\n";
+  String s = "wx radio=" + String(g_radioOk ? "listening" : "off") + " freq=" + String(g_freq, 2) + " decoded=" + String(g_decoded) + " skipped=" + String(g_skipped) + " repeats=" + String(g_repeats) + "\n";
+#ifdef OAT_RX_DATAPIN
+  s += "wx receiver gpio=" + String(OAT_RX_DATAPIN) + " frames=" + String(dp_frames) + " bad_checksum=" + String(dp_badcrc) + " bad_parity=" + String(dp_badparity) + "\n";
+#endif
   stLock();
   for (int i = 0; i < MAX_STATIONS; i++) {
     Station& st = stations[i]; if (!st.used) continue;
