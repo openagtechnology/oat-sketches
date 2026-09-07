@@ -1,5 +1,5 @@
 /* =============================================================================
-   OAT Weather-Station Listener  —  v1.0.4
+   OAT Weather-Station Listener  —  v1.0.5
    OpenAgricultureTechnology.com  ·  the Sketch Library (Collect layer)
    -----------------------------------------------------------------------------
    Hears the weather stations and outdoor sensors a grower already owns — the
@@ -46,6 +46,16 @@
    that re-roll on battery change fragment their history and the page says so.
 
    CHANGELOG
+     1.0.5  (1) Station table recycles: a new station arriving when every row is
+            taken now takes over the row that has been silent longest (its stream
+            was already released), instead of being dropped without a word. The
+            9/6 fix released the core slot but the row itself was kept for ever, so
+            24 stations ever heard meant the 25th was never filed. (2) The bare-
+            receiver path now checks parity as rtl_433's acurite_txr_check does:
+            bytes 2..6 even parity, channel bits 01 rejected. The byte sum alone
+            lets one corrupted frame in 256 through as a wild reading; parity is
+            what rtl_433 uses to stop that. Bad-parity frames are counted on the
+            setup page beside bad checksums.
      1.0.4  Text only, no behaviour change. The band field, the console message
             and this header no longer say 915.00 is "for Ecowitt / Ambient": that
             family is FSK and the OOK images cannot hear it (found 2026-09-07 in
@@ -78,8 +88,8 @@
 #endif
 
 #define TIER        "oat-weather-listener"
-#define FW_SEMVER   "1.0.4"
-#define FW_VERSION  "OAT-Weather-Listener/1.0.4"
+#define FW_SEMVER   "1.0.5"
+#define FW_VERSION  "OAT-Weather-Listener/1.0.5"
 #define NVS_NS      "oatwx"
 #ifndef OAT_BOARD_NAME
   #define OAT_BOARD_NAME "ESP32"
@@ -250,7 +260,18 @@ static void onDecoded(char* message) {
     if (!stations[i].used && freeIdx < 0) freeIdx = i;
   }
   if (d < 0) d = freeIdx;
-  if (d < 0) { stUnlock(); g_skipped++; return; }
+  if (d < 0) {                                          // every row taken: reuse the one silent longest
+    unsigned long oldest = 0; int victim = -1;
+    for (int i = 0; i < MAX_STATIONS; i++) {
+      if (!stations[i].gone) continue;
+      unsigned long age = millis() - stations[i].lastMs;
+      if (victim < 0 || age > oldest) { oldest = age; victim = i; }
+    }
+    if (victim < 0) { stUnlock(); g_skipped++; return; }   // all 24 live and talking: genuinely full
+    Serial.printf("[wx] table full: %s (silent %lu min) makes room for %s\n", stations[victim].sid, oldest / 60000UL, sid.c_str());
+    stations[victim].used = false;                      // its slot was released when it went silent
+    d = victim;
+  }
   Station& st = stations[d];
   if (!st.used) { memset(&st, 0, sizeof(st)); st.used = true; strncpy(st.sid, sid.c_str(), ID_LEN - 1); st.slot = oatcore::slotFor(st.sid, st.sid); }
   else if (st.gone || st.slot < 0) { st.slot = oatcore::slotFor(st.sid, st.sid); st.gone = false; }   // back after silence: re-claim
@@ -311,7 +332,7 @@ static volatile uint32_t dp_rise = 0;
 static volatile uint8_t  dp_state = 0, dp_sync = 0, dp_bits = 0;
 static volatile uint8_t  dp_buf[8], dp_frame[8];
 static volatile bool     dp_ready = false;
-static volatile uint32_t dp_frames = 0, dp_badcrc = 0;
+static volatile uint32_t dp_frames = 0, dp_badcrc = 0, dp_badparity = 0;
 
 static void IRAM_ATTR dpIsr() {
   uint32_t now = micros();
@@ -340,6 +361,10 @@ static void dpPoll() {
   dp_ready = false;
   int sum = 0; for (int i = 0; i < 7; i++) sum += b[i];
   if ((sum & 0xFF) != b[7] || sum == 0) { dp_badcrc++; return; }
+  // rtl_433's acurite_txr_check: bytes 2..6 carry even parity in bit 7 (the id
+  // bytes and the checksum are full 8-bit), and channel bits 01 never occur.
+  for (int i = 2; i <= 6; i++) if (__builtin_parity(b[i])) { dp_badparity++; return; }
+  if ((b[0] >> 6) == 1) { dp_badparity++; return; }
   dp_frames++;
   // Compose what rtl_433 would have said, and hand it to the same map.
   JsonDocument d;
@@ -450,7 +475,7 @@ static void wxRescan()  { if (g_radioOk) radioRetune(); }
 
 static String statusHtml() {
 #ifdef OAT_RX_DATAPIN
-  String p = "<div class='muted'>Bare 433 MHz receiver on GPIO " + String(OAT_RX_DATAPIN) + " &middot; AcuRite 5-in-1 decoder &middot; frames " + String(dp_frames) + ", bad checksum " + String(dp_badcrc) + " &middot; " + String(OAT_BOARD_NAME) + "</div>";
+  String p = "<div class='muted'>Bare 433 MHz receiver on GPIO " + String(OAT_RX_DATAPIN) + " &middot; AcuRite 5-in-1 decoder &middot; frames " + String(dp_frames) + ", bad checksum " + String(dp_badcrc) + ", bad parity " + String(dp_badparity) + " &middot; " + String(OAT_BOARD_NAME) + "</div>";
 #else
   String p = "<div class='muted'>Radio " + String(g_radioOk ? "listening" : "NOT STARTED") + " &middot; " + String(g_freq, 2) + " MHz &middot; " + String(OOK_MODULATION ? "OOK" : "FSK") + " &middot; " + String(OAT_BOARD_NAME) + "</div>";
 #endif
