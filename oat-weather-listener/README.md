@@ -7,14 +7,14 @@ appropriate technology for growing things — the right tool for the need, the b
 
 <h1 align="center">OAT Weather-Station Listener</h1>
 
-<p align="center"><strong>Hear the AcuRite, La Crosse, Oregon and Ecowitt / Ambient sensors you already own, and keep every reading.</strong><br>
+<p align="center"><strong>Hear the AcuRite, La Crosse or Oregon Scientific station you already own, and keep every reading.</strong><br>
 One sketch in the <a href="../">OAT Sketch Library</a> — they all share one setup flow and push the same open
 <a href="https://openagriculturetechnology.com/standard/">oat-ods</a> format to an endpoint you own.</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/status-flash_from_the_browser-6a994e" alt="Status: live, flash from the browser">
   <img src="https://img.shields.io/badge/hears-~220_rtl__433_device_types-0969da" alt="Hears ~220 rtl_433 device types">
-  <img src="https://img.shields.io/badge/radio-433_·_915_MHz_OOK_(CC1101_or_SX1276)-555" alt="Radio: 433 or 915 MHz OOK, CC1101 or SX1276">
+  <img src="https://img.shields.io/badge/radio-433_MHz_OOK_(CC1101_or_SX1276)-555" alt="Radio: 433 MHz OOK, CC1101 or SX1276">
   <img src="https://img.shields.io/badge/chips-ESP32_·_S3_·_C3_·_C6-555" alt="Chips: ESP32, S3, C3, C6">
   <img src="https://img.shields.io/badge/schema-oat--ods%2F0.3-6a994e" alt="Schema: oat-ods/0.3">
   <img src="https://img.shields.io/badge/license-GPL--3.0_(via_rtl__433__ESP)-blue" alt="License: GPL-3.0 via rtl_433_ESP">
@@ -26,11 +26,10 @@ One sketch in the <a href="../">OAT Sketch Library</a> — they all share one se
 **Flash this sketch onto an ESP32 with a five-dollar CC1101 radio and the board
 becomes a weather-station gateway.** The node hosts its own setup page: join its
 Wi-Fi and configure everything in your browser — no app, no account, no code
-editing. It hears the one-way 433 and 915 MHz broadcasts of the consumer weather
-stations and outdoor sensors a grower already owns — the AcuRite Iris (5-in-1)
-and Atlas, La Crosse, Oregon Scientific, and the Fine Offset family sold as
-Ecowitt and Ambient Weather (WS-2902 arrays, WH51 soil probes, WN35 leaf
-wetness, WH57 lightning, WH41 particulates, WH55 leak) — decodes them with the
+editing. It hears the one-way 433 MHz broadcasts of the consumer weather
+stations and outdoor sensors a grower already owns — the AcuRite Iris (5-in-1),
+Atlas and tower sensors, La Crosse, Oregon Scientific, the older Fine Offset
+arrays — decodes them with the
 [rtl_433](https://github.com/merbanan/rtl_433) project's decoders, maps every
 value onto the OAT vocabulary, and pushes it to an endpoint you own, by webhook
 or MQTT, or into [Home Assistant](https://openagriculturetechnology.com/home-assistant/weather-station/)
@@ -41,8 +40,7 @@ catch your first reading ([Set it up](#set-it-up), step 4).
 
 ```mermaid
 flowchart LR
-  W["AcuRite · La Crosse · Oregon<br>weather stations"] -. "433.92 MHz broadcast" .-> GW
-  F["Ecowitt / Ambient<br>arrays · soil · leaf · lightning · leak"] -. "915 MHz broadcast" .-> GW
+  W["AcuRite · La Crosse · Oregon<br>weather stations and sensors"] -. "433.92 MHz broadcast" .-> GW
   GW["ESP32 Gateway<br>(ESP32 + CC1101, this firmware)"] -- "oat-ods over<br>webhook or MQTT" --> E["YOUR endpoint<br>on your LAN or your cloud<br>Home Assistant (MQTT)"]
 ```
 
@@ -73,9 +71,9 @@ upstream, not a sketch release.
    (Chrome or Edge, ESP Web Tools) — pick the button that matches your board
    and radio (table below) — or build it yourself (see Build, below).
 2. Join the node's own Wi-Fi (`OAT-Setup-…`) and its setup page walks you
-   through Wi-Fi, delivery (webhook URL **or** MQTT), and naming. Set the
-   **band**: 433.92 for AcuRite, La Crosse and Oregon Scientific; 915.00 for the
-   Ecowitt / Ambient family in the US. The radio hears one band at a time.
+   through Wi-Fi, delivery (webhook URL **or** MQTT), and naming. Leave the
+   **band** at 433.92; that is where AcuRite, La Crosse and Oregon Scientific
+   broadcast. The radio hears one band at a time.
 3. Watch **Stations heard** on the same page. Your station appears on its next
    broadcast with its model, signal and how long ago; give it a minute. A
    shared band includes the neighbours' stations — the optional **allow-list**
@@ -119,10 +117,14 @@ rtl_433 library to gate on; it runs a sketch-local decoder for the AcuRite
 map as every other path. A station must be within tens of metres of a bare
 receiver; a CC1101 hears much farther.
 
-The shipped images demodulate **OOK**. The FSK arrays (Ecowitt WS80 / WS90
-ultrasonic) are the same source built with `-DOOK_MODULATION=false`; a radio
-cannot do both at once. A quarter-wave wire antenna is 17.3 cm at 433 MHz and
-8.2 cm at 915 MHz.
+The shipped images demodulate **OOK**. The Fine Offset family sold today as
+Ecowitt and Ambient Weather (WS-2902 / WH65 arrays, WH51 soil, WH31 / WN34
+probes, WH57 lightning, WH55 leak, WH41 / WH45 particulates, WS80 / WS90) is
+**FSK on 915 MHz, every sensor of it**, and these images do not hear it. The
+same source built with `-DOOK_MODULATION=false` links the FSK decoders, but
+that build has not been proven on hardware, so it is not offered or claimed.
+A radio cannot do both at once. A quarter-wave wire antenna is 17.3 cm at
+433 MHz.
 
 ## What it sends
 
@@ -138,10 +140,10 @@ m/s, `rain_in` → `rain_total` in mm, `temperature_F` → `temperature` in °C)
 | `wind_speed`, `wind_gust`, `wind_direction` | `m/s`, `m/s`, `deg` | mean, max, last | anemometers |
 | `rain_total`, `rain_rate` | `mm`, `mm/h` | cumulative, mean | rain gauges (see below) |
 | `uv_index`, `illuminance`, `solar_radiation` | —, `lx`, `W/m2` | mean | arrays |
-| `soil_moisture`, `leaf_wetness` | `%` | mean | WH51, WN35 |
-| `lightning_total`, `lightning_distance` | —, `km` | cumulative, last | WH57 |
-| `pm25`, `pm10`, `co2`, `pressure`, `water_level` | `ug/m3`, `ppm`, `hPa`, `cm` | mean | WH41, WH45, barometers, depth sensors |
-| `battery_low`, `water_leak` | — | state | every station, WH55 |
+| `soil_moisture`, `leaf_wetness` | `%` | mean | mapped for the FSK build; no OOK station sends them |
+| `lightning_total`, `lightning_distance` | —, `km` | cumulative, last | AcuRite Atlas |
+| `pm25`, `pm10`, `co2`, `pressure`, `water_level` | `ug/m3`, `ppm`, `hPa`, `cm` | mean | mapped; OOK barometers and depth sensors where rtl_433 has them |
+| `battery_low`, `water_leak` | — | state | every station; leak sensors where rtl_433 has them |
 | `voltage`, `rssi` | `V`, `dBm` | last | where the decoder reports them |
 
 Anything numeric the map does not know is forwarded **raw** under the decoder's
@@ -231,9 +233,10 @@ rtl_433_ESP not linked.
 ## FAQ
 
 **Which weather stations does it hear?**
-Any OOK station rtl_433 decodes on 433 or 915 MHz: AcuRite Iris and Atlas, La
-Crosse, Oregon Scientific, Bresser, TFA, and the Fine Offset family sold as
-Ecowitt and Ambient Weather. Davis stations frequency-hop and are better read
+Any OOK station rtl_433 decodes: AcuRite Iris, Atlas and tower sensors, La
+Crosse, Oregon Scientific, Bresser, TFA, the older Fine Offset WH1080 arrays.
+Not the Fine Offset family sold today as Ecowitt and Ambient Weather: those are
+FSK on 915 MHz. Davis stations frequency-hop and are better read
 from a WeatherLink Live; a Tempest talks to its own hub; Netatmo is cloud-only.
 The site page keeps the list current.
 
@@ -244,7 +247,8 @@ station is touched.
 
 **Can it hear 433 and 915 MHz at once?**
 No. One radio, one band at a time, set on the setup page. Two listeners, one
-per band, is the answer for a farm with both.
+per band, is the answer for a farm with both — and note that the current
+915 MHz Ecowitt / Ambient sensors are FSK, which these images do not decode.
 
 **Why is my rain total going up forever?**
 Because that is what the station reports: a running tip counter. Rainfall is

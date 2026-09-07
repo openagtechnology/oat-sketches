@@ -1,15 +1,20 @@
 /* =============================================================================
-   OAT Weather-Station Listener  —  v1.0.3
+   OAT Weather-Station Listener  —  v1.0.4
    OpenAgricultureTechnology.com  ·  the Sketch Library (Collect layer)
    -----------------------------------------------------------------------------
    Hears the weather stations and outdoor sensors a grower already owns — the
-   AcuRite Iris (5-in-1) and Atlas, La Crosse, Oregon Scientific, and the Fine
-   Offset family sold as Ecowitt and Ambient Weather (WH65/WS-2902 arrays, WH51
-   soil probes, WN30 temperature probes, WN35 leaf wetness, WH57 lightning, WH41
-   particulates, WH55 leak) — every one of which shouts its readings into the air
-   on 433 or 915 MHz for anyone to hear. This listens, harvests every value each
+   AcuRite Iris (5-in-1), Atlas and tower sensors, La Crosse, Oregon Scientific,
+   the older Fine Offset arrays — every one of which shouts its readings into the
+   air on 433 MHz for anyone to hear. This listens, harvests every value each
    device broadcasts, and pushes them as oat-ods to an endpoint the operator owns.
    The BLE Listener's sibling, tuned to the band where the outdoor sensors live.
+
+   NOT CLAIMED (2026-09-07): the Fine Offset family sold today as Ecowitt and
+   Ambient Weather (WH51 soil, WH65/WS-2902 arrays, WH31/WN34 probes, WH55 leak,
+   WH57 lightning, WH41/45 particulates, WS80/90) is FSK on 915 MHz, every sensor
+   of it. The shipped OOK images do not hear it. The MAP below already names its
+   fields so an FSK build lands them in the vocabulary, but that build is
+   unproven on hardware and the site does not offer it.
 
    THE DECODERS ARE NOT OURS. They are the rtl_433 project's, ported to the ESP32
    as rtl_433_ESP (GPL-3.0): ~220 on-off-keying device types, refreshed from the
@@ -26,10 +31,9 @@
    knows the AcuRite 5-in-1 (Iris) and is the lift of the IBC sketch that first
    decoded it on that board, with rtl_433's pulse tolerances. Fewer stations, same
    streams, same everything downstream. Both demodulate OOK and FSK, but not at the same time;
-   the shipped images are OOK (Acurite, Fine Offset OOK, La Crosse, Oregon). The
-   FSK arrays (Ecowitt WS80/WS90) are the same source built with
-   -DOOK_MODULATION=false. The receive frequency is a SETTING (band): 433.92 for
-   Acurite/La Crosse/Oregon, 915.00 for the Fine Offset family in the US.
+   the shipped images are OOK (Acurite, Fine Offset OOK, La Crosse, Oregon). An FSK
+   build is the same source built with -DOOK_MODULATION=false. The receive
+   frequency is a SETTING (band): 433.92 is where Acurite/La Crosse/Oregon live.
 
    TWO OUTPUTS, ONE FIRMWARE. With Wi-Fi and an endpoint configured, this is an OAT
    gateway and pushes oat-ods. With nothing configured it still prints every
@@ -42,6 +46,11 @@
    that re-roll on battery change fragment their history and the page says so.
 
    CHANGELOG
+     1.0.4  Text only, no behaviour change. The band field, the console message
+            and this header no longer say 915.00 is "for Ecowitt / Ambient": that
+            family is FSK and the OOK images cannot hear it (found 2026-09-07 in
+            the rtl_433_ESP decoder table; the site pages were corrected the same
+            day). The setup page now says what the band is and is not for.
      1.0.3  Core 1.2.1: a setting changed on the setup page now survives a reboot
             (the core saved before applying driver fields, so the web page was one
             save behind and a reboot reverted it). No behaviour change otherwise.
@@ -69,8 +78,8 @@
 #endif
 
 #define TIER        "oat-weather-listener"
-#define FW_SEMVER   "1.0.3"
-#define FW_VERSION  "OAT-Weather-Listener/1.0.3"
+#define FW_SEMVER   "1.0.4"
+#define FW_VERSION  "OAT-Weather-Listener/1.0.4"
 #define NVS_NS      "oatwx"
 #ifndef OAT_BOARD_NAME
   #define OAT_BOARD_NAME "ESP32"
@@ -395,7 +404,7 @@ static bool   setBand(const String& v, String& why) {
   why = "this image drives a bare 433 MHz receiver module; its band is fixed by the module"; return false;
 #endif
   float f = v.toFloat();
-  if (!(f >= 300 && f <= 928)) { why = "band must be a frequency in MHz: 433.92 (Acurite, La Crosse, Oregon) or 915.00 (Ecowitt / Ambient, US)"; return false; }
+  if (!(f >= 300 && f <= 928)) { why = "band must be a frequency in MHz, 300 to 928; 433.92 is where AcuRite, La Crosse and Oregon Scientific broadcast"; return false; }
   bool changed = fabs(f - g_freq) > 0.001f; g_freq = f;
   if (changed && g_radioOk) radioRetune();
   return true;
@@ -404,7 +413,7 @@ static String getAllow() { return g_allow; }
 static bool   setAllow(const String& v, String& why) { g_allow = v; return true; }
 
 static const oatcore::Field FIELDS[] = {
-  { "band", "Band (MHz)", "433.92 for AcuRite, La Crosse and Oregon Scientific; 915.00 for the Ecowitt / Ambient Weather family in the US. The radio hears one band at a time.", getBand, setBand },
+  { "band", "Band (MHz)", "433.92 for AcuRite, La Crosse and Oregon Scientific, which is what this image decodes. The radio tunes 300 to 928 MHz but hears one band at a time; the Ecowitt / Ambient sensors on 915 MHz are FSK and this on-off-keying image does not decode them.", getBand, setBand },
   { "stations", "Station allow-list (optional)", "Comma-separated stream ids, e.g. acurite-5n1:2716. Empty means every station heard is reported, which on a shared band includes the neighbours'.", getAllow, setAllow },
 };
 
@@ -454,7 +463,7 @@ static String statusHtml() {
   }
   stUnlock();
   p += "</table>";
-  if (!shown) p += "<p class='bad'>Nothing heard yet. A station transmits every 16 to 60 seconds, so give it a minute. If it stays empty: the band must match the station (433.92 for AcuRite, 915.00 for Ecowitt/Ambient in the US), the antenna must be the right length for that band, and the station must be within range of a receiver that is far less sensitive than a dedicated SDR dongle.</p>";
+  if (!shown) p += "<p class='bad'>Nothing heard yet. A station transmits every 18 to 60 seconds, so give it a minute. If it stays empty: the band must match the station (433.92 for AcuRite, La Crosse and Oregon Scientific), the antenna must be the right length for that band, and the station must be within range of a receiver that is far less sensitive than a dedicated SDR dongle. Ecowitt and Ambient Weather sensors are FSK on 915 MHz and this image does not decode them.</p>";
   if (g_unmapped[0]) p += "<div class='muted'>Values arriving under keys the vocabulary does not map yet, forwarded raw: <code>" + String(g_unmapped) + "</code>. Nothing is lost; these can be promoted to named measurands.</div>";
   p += "<div class='muted'>Signals decoded " + String(g_decoded) + " &middot; skipped " + String(g_skipped) + (g_allow.length() ? " &middot; allow-list on" : " &middot; every station reported") + "</div>";
   return p;
