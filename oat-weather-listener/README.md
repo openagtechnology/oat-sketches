@@ -33,7 +33,7 @@ arrays — decodes them with the
 [rtl_433](https://github.com/merbanan/rtl_433) project's decoders, maps every
 value onto the OAT vocabulary, and pushes it to an endpoint you own, by webhook
 or MQTT, or into [Home Assistant](https://openagriculturetechnology.com/home-assistant/weather-station/)
-by MQTT discovery. The [BLE Listener](../oat-ble-listener/)'s sibling, tuned to
+over MQTT (one topic per reading, declared in YAML). The [BLE Listener](../oat-ble-listener/)'s sibling, tuned to
 the band where the outdoor sensors live. A live
 [Test Endpoint](https://iot-test.openagriculturetechnology.com/) is ready to
 catch your first reading ([Set it up](#set-it-up), step 4).
@@ -190,8 +190,9 @@ sample payloads — lives in the
 - **The band is a runtime setting.** Changing it re-initialises the receiver
   (the library owns the radio's task and buffers; `end()`/`begin()` is the one
   clean way to retune). A bare-receiver image's band is fixed by its module.
-- **Home Assistant.** Point the node at your broker with MQTT discovery on and
-  the station's entities appear; the
+- **Home Assistant.** Point the node at your broker and declare each reading as
+  an MQTT sensor in YAML (`oat/<name>/<station>/<measurement>`, value from
+  `value_json.value`); the sketches send no discovery announcements. The
   [weather-station guide](https://openagriculturetechnology.com/home-assistant/weather-station/)
   covers three routes, including stations that only talk to their own hub.
 
