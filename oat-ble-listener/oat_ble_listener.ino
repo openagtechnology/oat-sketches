@@ -1,5 +1,5 @@
 /* =============================================================================
-   OAT BLE Sensor Listener  —  v2.0.4
+   OAT BLE Sensor Listener  —  v2.1.0
    OpenAgricultureTechnology.com  ·  the Sketch Library (Collect layer)
    -----------------------------------------------------------------------------
    Hears BLE sensors a grower already owns (Govee, Xiaomi, Inkbird, ATC and the rest
@@ -35,14 +35,29 @@
    THE 'REAL SENSORS ONLY' DEFAULT
      With no allow-list, a device is reported only if it emits a KNOWN physical
      measurement. Without that gate a busy room fills your endpoint with strangers'
-     phones and trackers: Apple Continuity decodes a screen-lock as a state change,
-     AirPods report three battery levels. Phones also rotate their advertised address
-     every ~15 minutes, so one physical device becomes many ephemeral streams and no
-     MAC allow-list can ever pin them down. "Is it a real sensor" is the only filter
+     phones and trackers: the decoder still recognises a phone or an earbud case as a
+     device, even though (since Theengs 2.1) it no longer reports their lock state or
+     battery levels. Phones also rotate their advertised address every ~15 minutes,
+     so one physical device becomes many ephemeral streams and no MAC allow-list can
+     ever pin them down. "Is it a real sensor" is the only filter
      that works. The MAC allow-list is the single opt-in: allow-listed devices are
      reported in full.
 
    CHANGELOG
+     2.1.0  Theengs Decoder 2.4.5 (was 1.9.9, a year behind): 137 device models, among
+            them the b-parasite soil sensor, LYWSD03MMC on PVVX firmware (BTHome v2),
+            Govee H5140 CO2, ThermoPro TP350, SwitchBot Meter Pro and Inkbird IBS-P02B.
+            Every one of those emits keys the shared dictionary already maps, so the
+            decode path is unchanged. Two things the new library does that this sketch
+            had to absorb: (1) it stamps each match with tag flags (encr, ctrl, bvpp)
+            that are numbers or booleans and would have been forwarded as measurands;
+            they are metadata now. (2) Victron chargers and shunts decode as "Victron
+            encrypted" with only the ciphertext, because the library does not hold the
+            owner's key; they carry no measurand and the sensors-only gate drops them.
+            Reading them means a decrypt step and a per-device key field, a later
+            version. Also: the status page now shows free heap and the decode worker's
+            stack headroom, so a bench can see memory pressure instead of guessing at
+            it. Core 1.2.2 (rssi "unset" is one value across drivers).
      2.0.4  Core 1.2.1: a setting changed on the setup page now survives a reboot
             (the core saved before applying driver fields, so the web page was one
             save behind and a reboot reverted it). No behaviour change otherwise.
@@ -78,8 +93,8 @@
 #include <decoder.h>
 
 #define TIER        "oat-ble-listener"
-#define FW_SEMVER   "2.0.4"
-#define FW_VERSION  "OAT-BLE-Listener/2.0.4"
+#define FW_SEMVER   "2.1.0"
+#define FW_VERSION  "OAT-BLE-Listener/2.1.0"
 #define NVS_NS      "oatble"          // unchanged, so a 1.4.x node keeps its settings
 
 #define BLE_SCAN_MS       5000        // length of each scan window (ms)
@@ -140,6 +155,7 @@ struct RawAdv {
   int     rssi;
 };
 static QueueHandle_t advQueue = nullptr;
+static TaskHandle_t  g_decodeTask = nullptr;   // for the stack high-water mark on /status
 
 static volatile uint32_t g_advSeen = 0, g_advDecoded = 0, g_advMatched = 0;
 static String g_allowlist;            // "" = accept every recognised device
@@ -242,9 +258,9 @@ void decodeWorker(void*) {
     const char* model = in["model"].isNull() ? "" : in["model"].as<const char*>();
 
     // "Real sensors only" gate (v1.4.3). With no allow-list, report a device ONLY if it
-    // carries a real physical measurement — this drops ambient phones (Apple Continuity
-    // screen-lock -> `unlocked`), strangers' beacons, and state-only advertisers that
-    // flood a listener in a populated room. An allow-list is the opt-in: any MAC on it is
+    // carries a real physical measurement — this drops ambient phones and earbuds (the
+    // decoder knows the brand but they emit no measurand), strangers' beacons, and
+    // state-only advertisers that flood a listener in a populated room. An allow-list is the opt-in: any MAC on it is
     // reported in full (lock state, beacon presence). Empty list => sensors only.
     if (g_allowlist.length() > 0) {
       if (!macAllowed(macUp.c_str())) continue;              // allow-list = hard filter
@@ -331,9 +347,9 @@ void startBLE() {
 #if CONFIG_FREERTOS_UNICORE
   // Single-core parts (C6/C3/C2/H2) have no core 1 — pinning to it panics at boot
   // (constant reboot). Create with no affinity; the one core runs it.
-  xTaskCreate(decodeWorker, "oat_decode", DECODE_STACK, nullptr, 1, nullptr);
+  xTaskCreate(decodeWorker, "oat_decode", DECODE_STACK, nullptr, 1, &g_decodeTask);
 #else
-  xTaskCreatePinnedToCore(decodeWorker, "oat_decode", DECODE_STACK, nullptr, 1, nullptr, 1);
+  xTaskCreatePinnedToCore(decodeWorker, "oat_decode", DECODE_STACK, nullptr, 1, &g_decodeTask, 1);
 #endif
   NimBLEDevice::init("");
   NimBLEScan* scan = NimBLEDevice::getScan();
@@ -348,6 +364,18 @@ void startBLE() {
 // status page, which is the gain from the port: the question "has it heard
 // anything?" is asked while you are setting it up, not afterwards.
 // ---------------------------------------------------------------------------
+// Memory, in one line, so a bench can see pressure rather than guess at it. The stack
+// figure is the decode worker's high-water mark: the LEAST headroom it has ever had
+// (ESP-IDF reports it in bytes). If it trends toward zero, raise DECODE_STACK.
+static String memLine(bool html = true) {
+  String m = "Free heap " + String(ESP.getFreeHeap() / 1024) + " KB (lowest " +
+             String(ESP.getMinFreeHeap() / 1024) + " KB)";
+  if (g_decodeTask)
+    m += String(html ? " &middot; " : " | ") + "decode worker stack headroom " + String((unsigned)uxTaskGetStackHighWaterMark(g_decodeTask)) +
+         " of " + String(DECODE_STACK) + " bytes";
+  return m;
+}
+
 static String statusHtml() {
   String p = "<table class='tbl'><tr><th>Device</th><th>Model</th><th>Signal</th><th>Last heard</th></tr>";
   int shown = 0;
@@ -372,6 +400,7 @@ static String statusHtml() {
          String(g_unmapped) + "</code>. Nothing is lost; these can be promoted to named measurands.</div>";
   p += "<div class='muted'>Adverts heard " + String(g_advSeen) + " &middot; decoded " + String(g_advDecoded) +
        " &middot; matched a known model " + String(g_advMatched) + "</div>";
+  p += "<div class='muted'>" + memLine() + "</div>";
   if (g_allowlist.length() == 0)
     p += "<div class='muted'>No allow-list, so only devices emitting a known physical measurement are "
          "reported. That is what keeps a busy room's phones and trackers out of your data.</div>";
@@ -390,6 +419,7 @@ static String statusText() {
   }
   devUnlock();
   if (g_unmapped[0]) s += "unmapped decoder keys (forwarded raw): " + String(g_unmapped) + "\n";
+  s += memLine(false) + "\n";
   return s;
 }
 

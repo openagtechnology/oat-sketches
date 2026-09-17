@@ -13,7 +13,7 @@ One sketch in the <a href="../">OAT Sketch Library</a> — they all share one se
 
 <p align="center">
   <img src="https://img.shields.io/badge/status-flash_from_the_browser-6a994e" alt="Status: live, flash from the browser">
-  <img src="https://img.shields.io/badge/hears-~120_BLE_device_types-0969da" alt="Hears ~120 BLE device types">
+  <img src="https://img.shields.io/badge/hears-137_BLE_device_types-0969da" alt="Hears 137 BLE device types">
   <img src="https://img.shields.io/badge/chips-ESP32_·_S3_·_C3_·_C6-555" alt="Chips: ESP32, S3, C3, C6">
   <img src="https://img.shields.io/badge/schema-oat--ods%2F0.3-6a994e" alt="Schema: oat-ods/0.3">
   <img src="https://img.shields.io/badge/license-GPL--family_(via_Theengs)-blue" alt="License: GPL-family via Theengs Decoder">
@@ -25,8 +25,9 @@ One sketch in the <a href="../">OAT Sketch Library</a> — they all share one se
 **Flash this sketch onto an ESP32 and the board becomes a Bluetooth-listening
 gateway.** The node hosts its own setup page: join its Wi-Fi and configure
 everything in your browser — no app, no account, no code editing. It listens
-for BLE sensor broadcasts — Govee, Xiaomi, Inkbird, Ruuvi, SwitchBot and ~120
-other device types via [Theengs Decoder](https://decoder.theengs.io/) —
+for BLE sensor broadcasts — Govee, Xiaomi, Inkbird, Ruuvi, SwitchBot and the rest of
+the [137 device types](https://decoder.theengs.io/devices/devices.html) in
+[Theengs Decoder](https://decoder.theengs.io/) 2.4.5 —
 harvests **every measurand each device emits** (temperature, humidity, soil
 moisture, conductivity, CO₂, PM2.5, illuminance, pressure, and the rest),
 folds the chatty readings into steady values, and pushes them to an endpoint
@@ -44,7 +45,7 @@ flowchart LR
   GW["ESP32 Gateway<br>(this firmware, listening)"] -- "oat-ods over<br>webhook or MQTT" --> E["YOUR endpoint<br>on your LAN or your cloud"]
 ```
 
-<p align="center"><img src="https://openagriculturetechnology.com/assets/img/store/components/govee-h5075.jpg" alt="A Govee H5075 Bluetooth thermometer-hygrometer, one of ~120 device types this node hears" width="360"></p>
+<p align="center"><img src="https://openagriculturetechnology.com/assets/img/store/components/govee-h5075.jpg" alt="A Govee H5075 Bluetooth thermometer-hygrometer, one of 137 device types this node hears" width="360"></p>
 
 <p align="center"><img src="../docs/img/ble-listener-gateway.png" alt="An ESP32 BLE listener gateway hearing nearby Bluetooth sensors" width="560"></p>
 
@@ -178,11 +179,17 @@ anyone listening — that's how their own phone apps work. This node simply
 listens; nothing is configured, paired, or changed on the sensor.
 
 **Which sensors does it hear?**
-Roughly 120 device types via the open Theengs Decoder project: Govee, Xiaomi,
-Inkbird, Ruuvi, SwitchBot, ThermoPro and more — thermometers, hygrometers, soil
-sensors, scales, air-quality monitors. If a device's decoder key isn't in the
-vocabulary yet, the reading is forwarded raw and listed on the node's status
-page so it can be promoted.
+The 137 device types in the open Theengs Decoder project's
+[supported-devices list](https://decoder.theengs.io/devices/devices.html) (version
+2.4.5 ships in this build): Govee, Xiaomi, Inkbird, Ruuvi, SwitchBot, ThermoPro,
+b-parasite and more — thermometers, hygrometers, soil sensors, CO₂ monitors,
+scales, air-quality monitors. That list is the authority; we do not keep a copy
+that could go stale. What has actually sat on our bench and been heard by this
+firmware: Govee H5075 / H5100 / H5175 and the Xiaomi Flower Care. If a device's
+decoder key isn't in the vocabulary yet, the reading is forwarded raw and listed
+on the node's status page so it can be promoted. Victron solar chargers and
+shunts are on the list but broadcast encrypted, and this firmware does not yet
+hold the key, so they are heard but not read.
 
 **What happens when a sensor stops broadcasting?**
 After ten silent minutes its stream is released and the status page marks it
