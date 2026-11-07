@@ -23,14 +23,19 @@ One sketch in the <a href="../">OAT Sketch Library</a> — they all share one se
 
 ---
 
-**Flash this sketch onto an ESP32 with a five-dollar CC1101 radio and the board
-becomes a weather-station gateway.** The node hosts its own setup page: join its
+**Flash this sketch onto an ESP32 with a two-dollar 433 MHz receiver or a
+five-dollar CC1101 radio and the board becomes a weather-station gateway.** The node hosts its own setup page: join its
 Wi-Fi and configure everything in your browser — no app, no account, no code
-editing. It hears the one-way 433 MHz broadcasts of the consumer weather
-stations and outdoor sensors a grower already owns — the AcuRite Iris (5-in-1),
-Atlas and tower sensors, La Crosse, Oregon Scientific, the older Fine Offset
-arrays — decodes them with the
-[rtl_433](https://github.com/merbanan/rtl_433) project's decoders, maps every
+editing. It hears the one-way broadcasts of the consumer weather
+stations and outdoor sensors a grower already owns. One source, five builds.
+For the AcuRite Iris (5-in-1), two that both work on our bench with the same
+decoder of our own: a CC1101 (Build 4, the better radio) or a bare receiver on
+one pin (Build 1). A CC1101 with the
+[rtl_433](https://github.com/merbanan/rtl_433) project's on-off-keying decoders
+hears the 433 MHz long tail — AcuRite's line, La Crosse TX141, Oregon
+Scientific, the older Fine Offset arrays (beta, not yet run on our bench); and
+a CC1101 FSK build for the Ecowitt / Ambient, La Crosse View and Bresser
+families compiles and waits for its first sensor. Each build maps every
 value onto the OAT vocabulary, and pushes it to an endpoint you own, by webhook
 or MQTT, or into [Home Assistant](https://openagriculturetechnology.com/home-assistant/weather-station/)
 over MQTT (one topic per reading, declared in YAML). The [BLE Listener](../oat-ble-listener/)'s sibling, tuned to
@@ -107,24 +112,81 @@ by what the board is electrically.
 | `esp32-c6` | ESP32-C6 devkit | CC1101 — SCK 6 · MISO 2 · MOSI 7 · CS 18 · GDO0 10 · GDO2 11 | beta |
 | `heltec-v2` | Heltec WiFi LoRa 32 V2 | its own SX1276 — nothing to wire | beta |
 | `heltec-v3` | Heltec WiFi LoRa 32 V3 | CC1101 on spare pins — SCK 5 · MISO 6 · MOSI 7 · CS 4 · GDO0 3 · GDO2 2 (the V3's SX1262 cannot demodulate OOK) | beta |
-| `ibc-v102` | ESP32 (classic), a bare 433 MHz superheterodyne receiver, DATA on GPIO 33 | no transceiver: the sketch's own pulse decoder, AcuRite 5-in-1 only | **tested** — an AcuRite Iris decoded and landed at the endpoint |
+| `esp32-cc1101-5n1` | ESP32 (classic) + CC1101 sold as 433 MHz — SCK 18 · MISO 19 · MOSI 23 · CS 5 · GDO0 22 · 3V3 · GND | Build 4: our AcuRite 5-in-1 decoder (lib/oat_rf433), no rtl_433 | **tested** — two Iris stations since 2026-09-26; the better radio for an Iris |
+| `ibc-v102` | ESP32 (classic), a bare 433 MHz superheterodyne receiver, DATA on GPIO 33 | Build 1: the same AcuRite 5-in-1 decoder | **tested** — an AcuRite Iris decoded and landed at the endpoint (1.0.6); 1.4.0 benches 2026-10-25 |
 | `ibc-v102-cc1101` | ESP32 (classic) + CC1101 on alternate pins — SCK 32 · MOSI 27 · MISO 35 · CS 25 · GDO0 33 · GDO2 36 | the full decoder set | beta |
+
+Every CC1101 / SX1276 env above has an **`-fsk` twin** (`esp32-fsk`,
+`esp32-s3-fsk`, `esp32-c3-fsk`, `esp32-c6-fsk`, `heltec-v2-fsk`, `heltec-v3-fsk`,
+`ibc-v102-cc1101-fsk`) on the same pins: the same source with
+`-DOOK_MODULATION=false` and a 915.00 default band. Status of every one:
+**built 2026-09-18, not yet heard a sensor**, so the site does not offer them;
+`build.sh` keeps them in `bench/`. `esp32-fsk-bench` adds the library's heap
+reporting for a soak test. The `heltec-v3` pin map is for the **V3 only**: on a
+Heltec V4, GPIO 2, 5 and 7 belong to the LoRa front-end module.
 
 *Tested* means a reading reached the endpoint on that board. The bare-receiver
 path exists because a superheterodyne module has no signal level for the
 rtl_433 library to gate on; it runs a sketch-local decoder for the AcuRite
-5-in-1 (Iris) with rtl_433's pulse tolerances, and hands the fields to the same
-map as every other path. A station must be within tens of metres of a bare
-receiver; a CC1101 hears much farther.
+5-in-1 (Iris) and hands the fields to the same map as every other path.
 
-The shipped images demodulate **OOK**. The Fine Offset family sold today as
-Ecowitt and Ambient Weather (WS-2902 / WH65 arrays, WH51 soil, WH31 / WN34
-probes, WH57 lightning, WH55 leak, WH41 / WH45 particulates, WS80 / WS90) is
-**FSK on 915 MHz, every sensor of it**, and these images do not hear it. The
-same source built with `-DOOK_MODULATION=false` links the FSK decoders, but
-that build has not been proven on hardware, so it is not offered or claimed.
-A radio cannot do both at once. A quarter-wave wire antenna is 17.3 cm at
-433 MHz.
+**Build 4 (1.4.0, on the main page since 2026-10-24):** a CC1101 on the `esp32` wiring (SCK 18, MISO 19,
+MOSI 23, CS 5, GDO0 22), programmed by the sketch itself as a plain receiver,
+with GDO0 read as a data pin by that same decoder — env `esp32-cc1101-5n1`. The
+rtl_433 CC1101 path heard nothing on 433 (2026-09-20: its signal-strength gate
+drops every on-off-keying 0 bit); this one decoded both of our Iris stations on
+2026-09-26 and heard one the bare receiver beside it barely could. From 1.3.0
+the bare receiver and build 4 share a decoder that reads the frame on the
+station's ~628 us bit clock, fills pulses the receiver's slicer shrank to
+nothing, splits pulses it merged, holds a station id until it is heard twice,
+and holds an implausible jump until the next frame agrees. On 2026-10-24 Build 4
+heard the farther station in 44 of 60 minutes; the bare receiver beside it, still
+on 1.0.6, heard it in 2. Both are offered: Build 4 as the better choice, Build 1
+because it works and costs less. `*-bench` envs add the live-tuning and `capture`
+commands and stay on the bench page.
+
+**Build 5 (1.4.4; first shipped 1.4.0):** Ecowitt / Ambient Weather sensors through a
+**915 MHz CC1101 in packet mode**, env `esp32-cc1101-ecowitt-fsk`, built with
+`-DOAT_RX_FSK915`. The chip does the radio work in hardware: 2-FSK at 17.24
+kBaud, the bit clock, the `2d d4` sync word, fixed 24-byte frames with its RSSI
+appended. The sketch polls the FIFO over SPI (`lib/oat_rf915`) and checks each
+frame with the sensor's own CRC-8 and SUM-8 in our decoders for the WH31
+(0x30 / 0x37), WH51 (0x51), WN34 / WN38 (0x34 / 0x38) and WH52 (0xA2).
+rtl_433_ESP is not linked, and only SPI is wired: SCK 18 · MISO 19 · MOSI 23 ·
+CS 5 · **3V3** (the module's limit is 3.6 V) · GND. Console: `families`,
+`raw on|off`, `rssi`, `regs`, `tune bw|drate|dev`.
+
+Heard on our bench beside an Ecowitt GW1100B posting the same sensors: a WH31B,
+two WH51 and a WN34 (2026-10-04) and a WH52 (2026-11-06), every value equal to
+the gateway's. The WH52 sends soil moisture, soil temperature, conductivity in
+the gateway's 10 µS/cm steps (12 bits above byte 10, × 10; checked 80 to
+340 µS/cm across two pots; rtl_433's `/ 25.6` read about 7 % high there) and the
+raw moisture count as `moisture_ad`. **No battery voltage for the WH52 yet:** the
+byte rtl_433 uses read 0x95 on our probe against the gateway's 1.58 V.
+
+Why a second path beside the `esp32-wh51` / `esp32-fsk` images: the 2026-09-20
+rtl_433 run through a 433-matched module found the preamble, the sync and the
+sensor families but not their checksums, and on 2026-10-04 the rtl_433 FSK image
+on a 915 module still decoded none. Packet mode does not depend on that answer:
+the chip times the bits.
+
+The images the site offers demodulate **OOK**. The Fine Offset family sold
+today as Ecowitt and Ambient Weather (WS-2902 / WH65 arrays, WS80 / WS85 / WS90,
+WH51 and WH52 soil, WH31 / WN34 probes, WH40 rain, WH57 lightning, WH55 leak,
+WH43 / WH45 / WH46 air quality) is **FSK, every sensor of it, on every carrier
+it is sold on** — 915 MHz in the Americas and Oceania, 868 in Europe, 433
+elsewhere — so the band is a setting and the modulation is the image. So are La
+Crosse View (LTV) and IT+ (TX29-IT, TX35) and the Bresser 5/6/7-in-1 family.
+The `-fsk` envs link those decoders; they have not been proven on hardware, so
+they are not offered or claimed. No decoder exists in this library build for
+the Ecowitt WN30, WN35, WN36, WH41 or WFC01. A radio cannot do both modulations
+at once. A quarter-wave wire antenna is 17.3 cm at 433 MHz, 8.6 cm at 868,
+8.2 cm at 915; buy the CC1101 module sold for your band.
+
+rtl_433_ESP is **pinned** in `platformio.ini` to commit `236c816` (2026-09-02),
+the tree these images were built from: 223 OOK and 153 FSK decoders registered.
+The site's device table is generated from those two registration lists, not
+typed.
 
 ## What it sends
 
@@ -140,7 +202,8 @@ m/s, `rain_in` → `rain_total` in mm, `temperature_F` → `temperature` in °C)
 | `wind_speed`, `wind_gust`, `wind_direction` | `m/s`, `m/s`, `deg` | mean, max, last | anemometers |
 | `rain_total`, `rain_rate` | `mm`, `mm/h` | cumulative, mean | rain gauges (see below) |
 | `uv_index`, `illuminance`, `solar_radiation` | —, `lx`, `W/m2` | mean | arrays |
-| `soil_moisture`, `leaf_wetness` | `%` | mean | mapped for the FSK build; no OOK station sends them |
+| `soil_moisture`, `soil_conductivity`, `leaf_wetness` | `%`, `uS/cm`, `%` | mean | garden soil probes (OOK); Ecowitt WH51 / WH52 on Build 5 |
+| `mains` | — | state | sensors that report external power (Ecowitt WH45) |
 | `lightning_total`, `lightning_distance` | —, `km` | cumulative, last | AcuRite Atlas |
 | `pm25`, `pm10`, `co2`, `pressure`, `water_level` | `ug/m3`, `ppm`, `hPa`, `cm` | mean | mapped; OOK barometers and depth sensors where rtl_433 has them |
 | `battery_low`, `water_leak` | — | state | every station; leak sensors where rtl_433 has them |
@@ -234,10 +297,14 @@ rtl_433_ESP not linked.
 ## FAQ
 
 **Which weather stations does it hear?**
-Any OOK station rtl_433 decodes: AcuRite Iris, Atlas and tower sensors, La
-Crosse, Oregon Scientific, Bresser, TFA, the older Fine Offset WH1080 arrays.
-Not the Fine Offset family sold today as Ecowitt and Ambient Weather: those are
-FSK on 915 MHz. Davis stations frequency-hop and are better read
+It depends on the build. Builds 4 (CC1101) and 1 (bare receiver): the AcuRite
+5-in-1 (Iris), with one decoder of ours; both heard on our bench, the CC1101 the
+better radio. The CC1101 on-off-keying images:
+any OOK device rtl_433 decodes — AcuRite Iris, Atlas and tower sensors, La
+Crosse TX141, Oregon Scientific, Nexus, TFA, the older Fine Offset WH1080
+arrays. Not the Fine Offset family sold today as Ecowitt and Ambient Weather,
+nor La Crosse View or the Bresser 5-in-1 family: those are FSK and need the
+`-fsk` build, which is not offered yet. Davis stations frequency-hop and are better read
 from a WeatherLink Live; a Tempest talks to its own hub; Netatmo is cloud-only.
 The site page keeps the list current.
 
@@ -247,9 +314,9 @@ their own displays work. The listener reports what it hears; nothing on the
 station is touched.
 
 **Can it hear 433 and 915 MHz at once?**
-No. One radio, one band at a time, set on the setup page. Two listeners, one
-per band, is the answer for a farm with both — and note that the current
-915 MHz Ecowitt / Ambient sensors are FSK, which these images do not decode.
+No. One radio, one band at a time, set on the setup page. And one modulation
+per image: an AcuRite (on-off keying) and an Ecowitt (FSK) cannot share a board
+whatever bands they are on. Two listeners is the answer for a farm with both.
 
 **Why is my rain total going up forever?**
 Because that is what the station reports: a running tip counter. Rainfall is

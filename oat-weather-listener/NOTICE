@@ -1,0 +1,5 @@
+oat-weather-listener — NOTICE
+Source: Apache-2.0 (see ../LICENSE). The CC1101 builds (OOK and FSK) link rtl_433_ESP (GPL-3.0), which carries the
+rtl_433 project's decoders (GPL-2.0-or-later). A BUILT IMAGE of those builds is therefore distributed under
+GPL-3.0-or-later (../LICENSES/GPL-3.0-or-later.txt). The bare-receiver build links neither and stays Apache-2.0.
+The corresponding source is this project .zip and the matching tag at https://github.com/openagtechnology/oat-sketches.

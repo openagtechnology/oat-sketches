@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 Open Agriculture Technology Collective
+// SPDX-License-Identifier: Apache-2.0
 /* =============================================================================
    oat_node_core.cpp — the shared node. See oat_node_core.h for why this exists.
 
@@ -28,6 +30,7 @@
 namespace oatcore {
 
 static const Driver* g_drv = nullptr;
+static bool standalone() { return g_drv && g_drv->standalone; }
 
 // ---------------------------------------------------------------------------
 // The slot table: one entry per sensor the driver has found, holding the window
@@ -54,6 +57,9 @@ static bool dispatchDriverCommand(const String& cmd, const String& rest) {
 // ----------------------------------------------------------------------------
 #define ADMIN_USER        "admin"                 // Basic Auth username (password is configurable)
 #define DEFAULT_ADMIN_PW  "oatsetup"              // default admin password (changeable in setup)
+#define AP_PW_MIN         8                       // WPA2 refuses a shorter passphrase, and softAP()
+#define AP_PW_MAX         63                      // then raises NO network at all: a bricked setup
+#define BOOT_HOLD_MS      5000UL                  // standalone: hold BOOT this long = password back to default
 
 
 
@@ -86,6 +92,7 @@ void pushAll();
 void pushBeacon();
 static void driverSample();
 static void driverCollect();
+static void restartApSoon();
 
 // ----------------------------------------------------------------------------
 // Configuration (persisted in NVS)
@@ -163,6 +170,7 @@ SemaphoreHandle_t sensorMutex;
 bool          apActive    = false;
 unsigned long apDropAtMs  = 0;       // when (millis) to drop the AP after a connect; 0 = keep
 bool          apSticky    = false;   // AP summoned by serial — don't auto-drop
+unsigned long apRestartAtMs = 0;     // standalone: re-key the network after this (0 = no)
 bool          staWasUp    = false;
 unsigned long lastWifiTry = 0;
 unsigned long staDownSince = 0;
@@ -246,9 +254,18 @@ static String macFromChip() {
 
 static String apSsid() {
   uint8_t m[6]; esp_read_mac(m, ESP_MAC_WIFI_STA);   // same efuse MAC as the device id
-  char buf[20];
-  snprintf(buf, sizeof(buf), "OAT-Setup-%02X%02X%02X", m[3], m[4], m[5]);
+  char buf[40];
+  snprintf(buf, sizeof(buf), "%s-%02X%02X%02X",
+           (g_drv && g_drv->apName && g_drv->apName[0]) ? g_drv->apName : "OAT-Setup", m[3], m[4], m[5]);
   return String(buf);
+}
+
+// A standalone node's network is locked with the admin password. Anything WPA2
+// would refuse falls back to the default rather than raising no network at all:
+// a node whose only door is a network that never appears cannot be reached to fix it.
+static String apPassword() {
+  if (cfg.admin_pw.length() >= AP_PW_MIN && cfg.admin_pw.length() <= AP_PW_MAX) return cfg.admin_pw;
+  return DEFAULT_ADMIN_PW;
 }
 
 // Stable mDNS hostname from the friendly name (sanitized) or the MAC id. Lower-
@@ -379,7 +396,13 @@ static bool applyField(const String& k, const String& v, String& msg) {
   else if (k == "sample")   { cfg.sample_s = (uint32_t) v.toInt(); if (cfg.sample_s < 2) cfg.sample_s = 2; if (cfg.sample_s > 600) cfg.sample_s = 600; }
   else if (k == "ntp")       cfg.ntp_server = v.length() ? v : String("pool.ntp.org");
   else if (k == "lineout")   cfg.lineout = (v == "1" || v == "true" || v == "on" || v == "yes");
-  else if (k == "admin_pw") { if (v.length()) cfg.admin_pw = v; }
+  else if (k == "admin_pw") {
+    if (v.length() && standalone() && (v.length() < AP_PW_MIN || v.length() > AP_PW_MAX)) {
+      msg = "The Wi-Fi password must be 8 to 63 characters (WPA2's rule). Kept the old one.";
+      return false;
+    }
+    if (v.length()) cfg.admin_pw = v;
+  }
   else {
     // Not a core field: offer it to the driver's own table before giving up. This is
     // why a driver never edits the registry, the form, the Console or NVS to add a
@@ -869,6 +892,53 @@ static const char JS_SHOWPW[] PROGMEM =
   "<script>function sp(id,el){var f=document.getElementById(id);"
   "if(f.type=='password'){f.type='text';el.textContent='hide';}else{f.type='password';el.textContent='show';}}</script>";
 
+// A stored value going back into value='...'. Unescaped, a device named "Mark's
+// porch" showed as "Mark" and the next Save stored "Mark"; it also let anyone on
+// the network write markup into the page.
+static String attr(const String& v) {
+  String o; o.reserve(v.length() + 8);
+  for (size_t i = 0; i < v.length(); i++) {
+    char c = v[i];
+    if      (c == '&')  o += "&amp;";
+    else if (c == '\'') o += "&#39;";
+    else if (c == '"')  o += "&quot;";
+    else if (c == '<')  o += "&lt;";
+    else if (c == '>')  o += "&gt;";
+    else o += c;
+  }
+  return o;
+}
+
+// The setup page for a standalone sketch: its name, its hardware, its password.
+// No WiFi, delivery or sampling sections, because none of them exist on this node.
+String standaloneForm() {
+  String h;
+  h += "<h1>Setup</h1>";
+  h += "<div class='muted'>Network <b class='ok'>" + apSsid() + "</b> &middot; http://" + AP_IP.toString() +
+       " &middot; fw " + String(g_drv->fw_version) + "</div>";
+  h += "<form method='POST' action='/save'>";
+  h += "<h2>Name</h2>";
+  h += "<label>Device name <span class='muted'>(for your own notes; the network name stays the same)</span></label>";
+  h += "<input name='dev_name' value='" + attr(cfg.device_name) + "' placeholder='Front porch'>";
+  h += "<label>Device ID</label><input value='" + cfg.device_id + "' readonly style='opacity:.6'>";
+  h += "<h2>" + String(g_drv->what) + "</h2>";
+  for (int i = 0; i < g_drv->nFields; i++) {
+    const Field &f = g_drv->fields[i];
+    h += "<label>" + String(f.label) + "</label><input name='" + String(f.key) + "' value='" + attr(f.get()) + "'>";
+    if (f.help && f.help[0]) h += "<div class='muted'>" + String(f.help) + "</div>";
+  }
+  h += "<h2>Wi-Fi password</h2>";
+  h += "<label>New password</label><span class='show' onclick=\"sp('apw',this)\">show</span>";
+  h += "<input id='apw' name='admin_pw' type='password' minlength='8' maxlength='63' placeholder='(unchanged)'>";
+  h += "<div class='muted'>The password for <b>" + apSsid() + "</b>. At least 8 characters; the default is <code>oatsetup</code>. "
+       "Changing it drops every phone off the network: rejoin with the new one. "
+       "Forgot it? Hold the board's BOOT button for 5 seconds and it goes back to <code>oatsetup</code>.</div>";
+  h += "<button class='btn' type='submit'>Save</button></form>";
+  h += "<p class='muted' style='text-align:center'><a href='/'>&larr; Back</a> &middot; <a href='/status'>Status</a> &middot; <a href='/reset'>Factory reset</a></p>";
+  h += FPSTR(JS_SHOWPW);
+  return h;
+}
+
 String fieldsForm() {
   String webhookSel = (cfg.method == "webhook") ? "selected" : "";
   String mqttSel    = (cfg.method == "mqtt")    ? "selected" : "";
@@ -883,13 +953,13 @@ String fieldsForm() {
 
   h += "<h2>Name this node first</h2>";
   h += "<label>Device name <span class='muted'>(becomes its address: oat-&lt;name&gt;.local)</span></label>";
-  h += "<input name='dev_name' value='" + cfg.device_name + "' placeholder='GH2-North'>";
-  h += "<div class='row'><div><label>Farm / user ID</label><input name='farm_id' value='" + cfg.farm_id + "'></div>";
-  h += "<div><label>Location</label><input name='location' value='" + cfg.location + "'></div></div>";
+  h += "<input name='dev_name' value='" + attr(cfg.device_name) + "' placeholder='GH2-North'>";
+  h += "<div class='row'><div><label>Farm / user ID</label><input name='farm_id' value='" + attr(cfg.farm_id) + "'></div>";
+  h += "<div><label>Location</label><input name='location' value='" + attr(cfg.location) + "'></div></div>";
   h += "<label>Device ID</label><input value='" + cfg.device_id + "' readonly style='opacity:.6'>";
 
   h += "<h2>WiFi</h2>";
-  h += "<label>Network</label><input name='ssid' list='ssids' value='" + cfg.ssid + "' placeholder='pick or type'>";
+  h += "<label>Network</label><input name='ssid' list='ssids' value='" + attr(cfg.ssid) + "' placeholder='pick or type'>";
   h += "<datalist id='ssids'>" + g_ssidOptions + "</datalist>";
   h += "<div class='muted'><a href='/rescan'>rescan networks</a></div>";
   h += "<label>Password</label><span class='show' onclick=\"sp('wpw',this)\">show</span>";
@@ -901,7 +971,7 @@ String fieldsForm() {
   h += "<option value='mqtt' " + mqttSel + ">MQTT</option></select>";
 
   h += "<div id='wh'>";
-  h += "<label>Webhook URL</label><input name='ep_url' value='" + cfg.ep_url + "' placeholder='https://...'>";
+  h += "<label>Webhook URL</label><input name='ep_url' value='" + attr(cfg.ep_url) + "' placeholder='https://...'>";
   h += "<div class='muted'>https is preferred; if this board is low on memory for TLS it auto-uses signed http (your data is signed either way).</div>";
   h += "<label>Endpoint key (optional)</label><span class='show' onclick=\"sp('epk',this)\">show</span>";
   h += "<input id='epk' name='ep_key' type='password' placeholder='" + String(cfg.ep_key.length() ? "(unchanged)" : "paste the key your endpoint gave you") + "'>";
@@ -910,10 +980,10 @@ String fieldsForm() {
   h += "</div>";
 
   h += "<div id='mq'>";
-  h += "<div class='row'><div><label>MQTT host</label><input name='mq_host' value='" + cfg.mq_host + "'></div>";
+  h += "<div class='row'><div><label>MQTT host</label><input name='mq_host' value='" + attr(cfg.mq_host) + "'></div>";
   h += "<div style='flex:.4'><label>Port</label><input name='mq_port' value='" + String(cfg.mq_port) + "'></div></div>";
-  h += "<label>Topic prefix</label><input name='mq_topic' value='" + cfg.mq_topic + "'>";
-  h += "<div class='row'><div><label>Username (optional)</label><input name='mq_user' value='" + cfg.mq_user + "'></div>";
+  h += "<label>Topic prefix</label><input name='mq_topic' value='" + attr(cfg.mq_topic) + "'>";
+  h += "<div class='row'><div><label>Username (optional)</label><input name='mq_user' value='" + attr(cfg.mq_user) + "'></div>";
   h += "<div><label>Password</label><input name='mq_pw' type='password' placeholder='(unchanged)'></div></div>";
   h += "<label><input type='checkbox' name='mq_tls' " + tlsChk + " style='width:auto'> Use TLS</label>";
   h += "</div>";
@@ -921,7 +991,7 @@ String fieldsForm() {
   h += "<h2>The sensors</h2>";
   for (int i = 0; i < g_drv->nFields; i++) {
     const Field &f = g_drv->fields[i];
-    h += "<label>" + String(f.label) + "</label><input name='" + String(f.key) + "' value='" + f.get() + "'>";
+    h += "<label>" + String(f.label) + "</label><input name='" + String(f.key) + "' value='" + attr(f.get()) + "'>";
     if (f.help && f.help[0]) h += "<div class='muted'>" + String(f.help) + "</div>";
   }
   if (slotCount() == 0) {
@@ -940,7 +1010,7 @@ String fieldsForm() {
   h += "<div class='muted'>The node averages every reading it takes inside a push window, so a short read interval means a steadier number.</div>";
 
   h += "<h2>Advanced</h2>";
-  h += "<label>NTP server</label><input name='ntp' value='" + cfg.ntp_server + "'>";
+  h += "<label>NTP server</label><input name='ntp' value='" + attr(cfg.ntp_server) + "'>";
   h += "<label>Admin password</label><input name='admin_pw' type='password' placeholder='(unchanged)'>";
   h += "<div class='muted'>Default is <code>oatsetup</code>. Change it once the node is online.</div>";
 
@@ -958,6 +1028,10 @@ String fieldsForm() {
 }
 
 bool requireAuth() {
+  // Standalone: the network's password already let this phone in. Asking again on
+  // a captive-portal sheet (which handles Basic Auth badly or not at all) only
+  // locks the owner out of their own eyes.
+  if (standalone()) return true;
   if (!server.authenticate(ADMIN_USER, cfg.admin_pw.c_str())) {
     server.requestAuthentication();
     return false;
@@ -967,14 +1041,51 @@ bool requireAuth() {
 
 void handleRoot() {
   if (!requireAuth()) return;
-  String p = FPSTR(PAGE_HEAD); p += fieldsForm(); p += FPSTR(PAGE_FOOT);
+  String p = FPSTR(PAGE_HEAD); p += standalone() ? standaloneForm() : fieldsForm(); p += FPSTR(PAGE_FOOT);
   server.send(200, "text/html", p);
 }
 
 // Connect-then-confirm: apply, save, join the new WiFi with the AP still up,
 // then show the LAN IP + name.local so the user is never stranded.
+// Standalone save: no network to join, so the answer is just what was kept and what
+// was refused. A changed password re-keys the network once this page has gone out.
+static void handleSaveStandalone() {
+  String m, rejected;
+  String beforeDriver;
+  for (int i = 0; i < g_drv->nFields; i++) beforeDriver += g_drv->fields[i].get() + "\x1f";
+  const String oldPw = cfg.admin_pw;
+  const char* keys[] = {"dev_name", "admin_pw"};
+  for (auto k : keys)
+    if (server.hasArg(k) && !applyField(k, server.arg(k), m)) { if (rejected.length()) rejected += "<br>"; rejected += m; }
+  for (int i = 0; i < g_drv->nFields; i++) {
+    const Field &f = g_drv->fields[i];
+    if (!server.hasArg(f.key)) continue;
+    String why;
+    if (!f.set(server.arg(f.key), why)) { if (rejected.length()) rejected += "<br>"; rejected += why; }
+  }
+  cfgSave();
+  String afterDriver;
+  for (int i = 0; i < g_drv->nFields; i++) afterDriver += g_drv->fields[i].get() + "\x1f";
+  if (afterDriver != beforeDriver && g_drv->rescan) g_drv->rescan();
+  bool rekey = cfg.admin_pw != oldPw;
+
+  String p = FPSTR(PAGE_HEAD);
+  if (rejected.length()) p += "<p class='bad'>Some settings were not applied:<br>" + rejected + "</p>";
+  p += "<h1 class='ok'>Saved &#10003;</h1>";
+  if (rekey) {
+    p += "<p>The Wi-Fi password changed. In a moment your phone will drop off <b>" + apSsid() +
+         "</b>. Join it again with the new password, then open <b>http://" + AP_IP.toString() + "</b>.</p>";
+  } else {
+    p += "<p><a class='btn' style='display:block;text-align:center;text-decoration:none' href='/'>Back &rarr;</a></p>";
+  }
+  p += FPSTR(PAGE_FOOT);
+  server.send(200, "text/html", p);
+  if (rekey) restartApSoon();
+}
+
 void handleSave() {
   if (!requireAuth()) return;
+  if (standalone()) { handleSaveStandalone(); return; }
   String m;
   const char* keys[] = {"dev_name","farm_id","location","ssid","wifi_pw","method","ep_url",
                         "ep_auth","ep_key","mq_host","mq_port","mq_user","mq_pw","mq_topic",
@@ -1074,16 +1185,28 @@ void handleStatus() {
   String p = FPSTR(PAGE_HEAD);
   p += "<h1>Live Status</h1>";
   p += "<div class='muted'>ID " + cfg.device_id + " &middot; fw " + g_drv->fw_version + " &middot; chip " + String(ESP.getChipModel()) + "</div>";
+  if (standalone())
+    p += "<div class='muted'>Network " + apSsid() + " &middot; http://" + AP_IP.toString() + " &middot; " +
+         String(WiFi.softAPgetStationNum()) + " joined</div>";
+  else
   p += "<div class='muted'>WiFi: " + String(WiFi.isConnected() ? "connected " : "down ") + localUrls() + " &middot; signal " + signalWords() + "</div>";
   p += "<div class='muted'>Uptime " + String(millis() / 1000) + "s &middot; boots " + String(bootCount) +
        " &middot; reset " + String(resetReasonStr()) + "</div>";
   p += "<div class='muted'>Heap: free " + String(ESP.getFreeHeap()) + " &middot; min " + String(ESP.getMinFreeHeap()) +
        " &middot; largest block " + String(largestFreeBlock()) + "</div>";
+  if (!standalone())
   p += "<div class='muted'>Push: " + String(lastPushOk ? "OK" : "FAIL") + " &middot; " + lastPushMsg +
        " &middot; ok " + String(pushOk) + " / fail " + String(pushFail) +
        " &middot; transport " + (lastTransport.length() ? lastTransport : "&mdash;") + "</div>";
 
   p += "<h2>" + String(g_drv->what) + "</h2>";
+  if (standalone()) {
+    if (g_drv->statusHtml) p += g_drv->statusHtml();
+    p += "<p style='text-align:center'><a href='/'>&larr; Back</a> &middot; <a href='/setup'>Setup</a></p>";
+    p += FPSTR(PAGE_FOOT);
+    server.send(200, "text/html", p);
+    return;
+  }
   if (slotCount() == 0) {
     p += "<p class='bad'>Nothing is answering.</p>";
     if (g_drv->diag) p += "<p class='bad'>" + g_drv->diag() + "</p>";
@@ -1150,11 +1273,15 @@ void handleRescan() {
 
 void handleReset() {
   if (!requireAuth()) return;
-  if (server.arg("confirm") != "1") {
+  // Erasing is a POST. As a GET link, a prefetch or a captive-portal sheet fetching
+  // /reset?confirm=1 could wipe a node nobody meant to touch.
+  if (server.method() != HTTP_POST || server.arg("confirm") != "1") {
     String p = FPSTR(PAGE_HEAD);
-    p += "<h1>Factory reset?</h1><p>This erases WiFi, endpoint, and all settings.</p>";
-    p += "<p><a class='btn' style='display:block;text-align:center;text-decoration:none' href='/reset?confirm=1'>Yes, erase everything</a></p>";
-    p += "<p style='text-align:center'><a href='/'>Cancel</a></p>" ;
+    p += standalone() ? "<h1>Factory reset?</h1><p>This erases every setting and puts the Wi-Fi password back to <code>oatsetup</code>.</p>"
+                      : "<h1>Factory reset?</h1><p>This erases WiFi, endpoint, and all settings.</p>";
+    p += "<form method='POST' action='/reset'><input type='hidden' name='confirm' value='1'>"
+         "<button class='btn' type='submit'>Yes, erase everything</button></form>";
+    p += String("<p style='text-align:center'><a href='") + (standalone() ? "/setup" : "/") + "'>Cancel</a></p>" ;
     p += FPSTR(PAGE_FOOT);
     server.send(200, "text/html", p); return;
   }
@@ -1174,7 +1301,10 @@ void handleNotFound() { handlePortal(); }
 // Physical USB = trusted; secrets are writable but never echoed.
 // ----------------------------------------------------------------------------
 void printReadyBanner() {
-  if (WiFi.isConnected())
+  if (standalone())
+    Serial.printf("[OAT] network: %s -> http://%s   |   type 'help' for commands\n",
+                  apSsid().c_str(), AP_IP.toString().c_str());
+  else if (WiFi.isConnected())
     Serial.printf("[OAT] Ready -> %s   |   type 'help' for commands\n", localUrlsPlain().c_str());
   else if (apActive)
     Serial.printf("[OAT] setup AP: %s -> http://%s   |   type 'help' for commands\n",
@@ -1184,6 +1314,24 @@ void printReadyBanner() {
 }
 
 void consoleHelp() {
+  if (standalone()) {
+    Serial.println(F(
+      "OAT Console commands:\n"
+      "  help                 this list\n"
+      "  status               network, uptime, heap, and this sketch's state\n"
+      "  ip                   the device address\n"
+      "  heap                 memory diagnostics\n"
+      "  name <label>         set device name\n"
+      "  set <field> <value>  set any field (see the setup page); set admin_pw <new> re-keys the network\n"
+      "  get <field>          show a field (secrets masked)\n"
+      "  reboot               restart the device\n"
+      "  factory-reset CONFIRM  erase all settings"));
+    if (g_drv->nCommands) {
+      Serial.printf("%s adds:\n", g_drv->tier);
+      for (int i = 0; i < g_drv->nCommands; i++) Serial.printf("  %-20s %s\n", g_drv->commands[i].name, g_drv->commands[i].help);
+    }
+    return;
+  }
   Serial.println(F(
     "OAT Console commands:\n"
     "  help                 this list\n"
@@ -1216,6 +1364,13 @@ void consoleHelp() {
 
 void consoleStatus() {
   Serial.printf("id=%s fw=%s chip=%s\n", cfg.device_id.c_str(), g_drv->fw_version, ESP.getChipModel());
+  if (standalone()) {
+    Serial.printf("network=%s http://%s joined=%u\n", apSsid().c_str(), AP_IP.toString().c_str(), WiFi.softAPgetStationNum());
+    Serial.printf("uptime=%lus boots=%u reset=%s\n", millis()/1000, bootCount, resetReasonStr());
+    Serial.printf("heap free=%u min=%u largest=%u\n", ESP.getFreeHeap(), ESP.getMinFreeHeap(), largestFreeBlock());
+    if (g_drv->statusText) Serial.print(g_drv->statusText());
+    return;
+  }
   Serial.printf("wifi=%s %s signal=%s\n", WiFi.isConnected() ? "up" : "down",
                 localUrlsPlain().c_str(), signalWords().c_str());
   Serial.printf("uptime=%lus boots=%u reset=%s reconnects=%u\n",
@@ -1257,9 +1412,18 @@ void handleConsoleLine(String line) {
   if (cmd.startsWith("improv")) return;   // ESP Web Tools serial probe, not a user command
   String m;
 
+  // A standalone node has no station, endpoint or push: say so, rather than run a
+  // command that would quietly reconfigure the radio out from under its own network.
+  if (standalone() && (cmd == "wifi" || cmd == "endpoint" || cmd == "push" || cmd == "scan" ||
+                       cmd == "reconnect" || cmd == "ap" || cmd == "read" || cmd == "rescan")) {
+    if (!dispatchDriverCommand(cmd, rest))
+      Serial.println("[OAT] '" + cmd + "' is not used here: this sketch runs its own network and sends nothing");
+    return;
+  }
+
   if (cmd == "help")            consoleHelp();
   else if (cmd == "status")     consoleStatus();
-  else if (cmd == "ip")         Serial.println(WiFi.isConnected() ? localUrlsPlain() : String("AP http://") + AP_IP.toString());
+  else if (cmd == "ip")         Serial.println(WiFi.isConnected() ? localUrlsPlain() : String("AP ") + apSsid() + " http://" + AP_IP.toString());
   else if (cmd == "heap")       Serial.printf("free=%u min=%u largest=%u (TLS needs >= %u)\n",
                                               ESP.getFreeHeap(), ESP.getMinFreeHeap(), largestFreeBlock(), (uint32_t)TLS_MIN_HEAP);
   else if (cmd == "read")     { driverSampleBlocking(); Serial.println("[oat] " + lastReadMsg); }
@@ -1272,7 +1436,9 @@ void handleConsoleLine(String line) {
   else if (dispatchDriverCommand(cmd, rest)) { /* handled by the sensor driver */ }
   else if (cmd == "reboot")   { Serial.println("[OAT] rebooting"); delay(200); ESP.restart(); }
   else if (cmd == "reconnect"){ reconnectWifi(); }
-  else if (cmd == "name")     { if (rest.length()) { applyField("dev_name", rest, m); cfgSave(); startMdns(); Serial.println("[OAT] name set; " + localUrlsPlain()); } }
+  else if (cmd == "name")     { if (rest.length()) { applyField("dev_name", rest, m); cfgSave();
+                                  if (standalone()) Serial.println("[OAT] name set: " + cfg.device_name);
+                                  else { startMdns(); Serial.println("[OAT] name set; " + localUrlsPlain()); } } }
   else if (cmd == "wifi")     {
     int s2 = rest.indexOf(' ');
     String ssid = (s2 < 0) ? rest : rest.substring(0, s2);
@@ -1300,8 +1466,10 @@ void handleConsoleLine(String line) {
     int s2 = rest.indexOf(' ');
     String key = (s2 < 0) ? rest : rest.substring(0, s2);
     String val = (s2 < 0) ? ""   : rest.substring(s2 + 1);
+    const String oldPw = cfg.admin_pw;
     if (applyField(key, val, m)) {
       cfgSave();
+      if (cfg.admin_pw != oldPw) restartApSoon();
       for (int i = 0; i < g_drv->nFields; i++)
         if (key == g_drv->fields[i].key && g_drv->rescan) { g_drv->rescan(); break; }
       Serial.println("[OAT] " + key + " = " + readField(key));
@@ -1337,7 +1505,7 @@ void scanWifi() {
   String opts;
   for (int i = 0; i < n && i < 20; i++) {
     String s = WiFi.SSID(i); s.replace("'", "");
-    if (s.length()) opts += "<option value='" + s + "'>";
+    if (s.length()) opts += "<option value='" + attr(s) + "'>";
   }
   g_ssidOptions = opts;
   WiFi.scanDelete();
@@ -1365,11 +1533,25 @@ void startMdns() {
 
 void startAP() {
   if (apActive) return;
-  WiFi.mode(WIFI_AP_STA);
+  WiFi.mode(standalone() ? WIFI_AP : WIFI_AP_STA);
   WiFi.softAPConfig(AP_IP, AP_IP, IPAddress(255, 255, 255, 0));
-  WiFi.softAP(apSsid().c_str());
+  if (standalone()) WiFi.softAP(apSsid().c_str(), apPassword().c_str());
+  else              WiFi.softAP(apSsid().c_str());
   dnsServer.start(DNS_PORT, "*", AP_IP);
   apActive = true;
+}
+
+// Standalone: the password IS the network's key, so changing it means raising the
+// network again. Deferred so the page confirming the change reaches the phone
+// before the phone is dropped.
+static void restartApSoon() { if (standalone()) apRestartAtMs = millis() + 1500; }
+static void restartApNow() {
+  apRestartAtMs = 0;
+  dnsServer.stop();
+  WiFi.softAPdisconnect(true);
+  apActive = false;
+  startAP();
+  Serial.printf("[OAT] network %s re-keyed with the new password\n", apSsid().c_str());
 }
 
 void stopAP() {
@@ -1383,6 +1565,13 @@ void stopAP() {
 
 // First-boot / power-on networking decision.
 void startNetworking() {
+  if (standalone()) {
+    // Its own network and nothing else. No station, so there is no channel hunt to
+    // drag the AP around and nothing for a missing home network to break.
+    WiFi.persistent(false);
+    startAP();
+    return;
+  }
   // Come up in AP_STA and STAY there — the arrangement that ran rock-solid on a
   // weak link. An "on-demand AP" that switches WiFi modes and rescans on every
   // disconnect churns the netif and amplifies the very dropouts it reacts to. The
@@ -1440,17 +1629,28 @@ void begin(const Driver& driver) {
 
   g_drv->begin();
   startNetworking();
-  configTime(0, 0, cfg.ntp_server.c_str());
+  if (!standalone()) configTime(0, 0, cfg.ntp_server.c_str());
 
-  server.on("/",        HTTP_GET,  handleRoot);
+  // The driver's pages first: the server answers with the first handler that
+  // matches, so a standalone sketch's "/" wins and the core's setup lives at /setup.
+  if (g_drv->routes) g_drv->routes();
+  if (!standalone()) server.on("/", HTTP_GET, handleRoot);
+  server.on("/setup",   HTTP_GET,  handleRoot);
   server.on("/save",    HTTP_POST, handleSave);
   server.on("/status",  HTTP_GET,  handleStatus);
-  server.on("/readnow", HTTP_GET,  handleReadNow);
-  server.on("/pushnow", HTTP_GET,  handlePushNow);
-  server.on("/rescan",  HTTP_GET,  handleRescan);       // WiFi networks
-  server.on("/rescansensors", HTTP_GET, handleRescanSensors);
-  server.on("/diag",    HTTP_GET,  handleDiag);
+  // A standalone node sends nothing and has no station: a Wi-Fi scan would switch
+  // station mode on and hop channels under the phones on its own network, and
+  // "push now" would contradict the page that says it sends nothing. The Console
+  // refuses the same commands.
+  if (!standalone()) {
+    server.on("/readnow", HTTP_GET,  handleReadNow);
+    server.on("/pushnow", HTTP_GET,  handlePushNow);
+    server.on("/rescan",  HTTP_GET,  handleRescan);       // WiFi networks
+    server.on("/rescansensors", HTTP_GET, handleRescanSensors);
+    server.on("/diag",    HTTP_GET,  handleDiag);
+  }
   server.on("/reset",   HTTP_GET,  handleReset);
+  server.on("/reset",   HTTP_POST, handleReset);
   // captive-portal probes (iOS / Android / Windows) -> bounce to the setup page
   server.on("/generate_204",       handlePortal);
   server.on("/gen_204",            handlePortal);
@@ -1493,6 +1693,30 @@ void loop() {
   if (apActive) dnsServer.processNextRequest();
   server.handleClient();
   pollConsole();
+
+  if (standalone()) {
+    if (apRestartAtMs && (long)(millis() - apRestartAtMs) >= 0) restartApNow();
+    // Forgotten password: hold BOOT for 5 s while running (holding it at power-on
+    // would enter the ROM downloader instead, which is why this is a while-running
+    // hold). Only the password is reset; the show keeps its settings.
+    static unsigned long bootDownSince = 0;
+    if (digitalRead(BOOT_BTN_PIN) == LOW) {
+      if (!bootDownSince) bootDownSince = millis();
+      else if (bootDownSince != 1 && millis() - bootDownSince >= BOOT_HOLD_MS) {
+        bootDownSince = 1;                       // once per press
+        cfg.admin_pw = DEFAULT_ADMIN_PW; cfgSave();
+        Serial.println("[OAT] BOOT held: Wi-Fi password is oatsetup again");
+        restartApSoon();
+      }
+    } else bootDownSince = 0;
+    driverCollect();
+    if (g_drv->startSample && (firstSample || millis() - lastSampleMs >= cfg.sample_s * 1000UL)) {
+      firstSample = false;
+      lastSampleMs = millis();
+      driverSample();
+    }
+    return;
+  }
 
   if (cfg.method == "mqtt" && mqtt.connected()) mqtt.loop();
 
@@ -1643,6 +1867,10 @@ void blobErase(const char* key) {
   if (prefs.isKey(key)) prefs.remove(key);
   prefs.end();
 }
+
+WebServer& web()          { return server; }
+String pageHead()         { return FPSTR(PAGE_HEAD); }
+String pageFoot()         { return FPSTR(PAGE_FOOT); }
 
 const String& deviceId()  { return cfg.device_id; }
 const String& gatewayId() { return cfg.device_name.length() ? cfg.device_name : cfg.device_id; }

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Open Agriculture Technology Collective
+# SPDX-License-Identifier: Apache-2.0
 # merge_bin.py — PlatformIO post-build hook.
 # -----------------------------------------------------------------------------
 # Produces ONE merged factory image per chip at out/firmware-<mcu>.bin, flashable

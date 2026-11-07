@@ -1,0 +1,7 @@
+{
+  "name": "oat_rf915",
+  "version": "1.2.0",
+  "description": "Ecowitt / Ambient Weather (Fine Offset) FSK sensors through a CC1101 in packet mode: hardware sync on 2d d4, WH31, WH51, WN34 decoders with CRC-8 + SUM-8",
+  "frameworks": "arduino",
+  "platforms": "espressif32"
+}

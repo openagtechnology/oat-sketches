@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Open Agriculture Technology Collective
+# SPDX-License-Identifier: Apache-2.0
 # Reproducible OAT firmware build in Docker (no host PlatformIO needed). Mounts
 # the firmware ROOT so the sketch's lib_extra_dirs=../lib resolves to firmware/lib,
 # with the sketch as workdir. Caches PlatformIO under /tmp/pio-cache between runs.

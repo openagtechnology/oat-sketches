@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 Open Agriculture Technology Collective
+// SPDX-License-Identifier: Apache-2.0
 /* =============================================================================
    oat_sign.h  —  OAT push signing, the shared HMAC module
    -----------------------------------------------------------------------------

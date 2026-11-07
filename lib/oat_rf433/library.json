@@ -1,0 +1,7 @@
+{
+  "name": "oat_rf433",
+  "version": "1.0.0",
+  "description": "AcuRite 5-in-1 on 433.92 MHz through a bare receiver or a CC1101 data pin: gap filter, bit-clock decoder, new-station and plausibility guards",
+  "frameworks": "arduino",
+  "platforms": "espressif32"
+}

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 Open Agriculture Technology Collective
+// SPDX-License-Identifier: Apache-2.0
 /* single_probe.ino — the smallest possible OAT sketch: one temperature stream.
  *
  * The point of this example is how LITTLE a new device needs. Fill a Device

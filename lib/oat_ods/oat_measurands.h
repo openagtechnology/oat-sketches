@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 Open Agriculture Technology Collective
+// SPDX-License-Identifier: Apache-2.0
 // oat_measurands.h — GENERATED from the oat-measurands vocabulary (https://openagriculturetechnology.com/standard/reference/)
 // DO NOT EDIT BY HAND. Regenerate: python3 scripts/oat/gen_measurands.py
 // -----------------------------------------------------------------------------
@@ -69,12 +71,7 @@ static const size_t OAT_MEASURANDS_N = sizeof(OAT_MEASURANDS) / sizeof(OAT_MEASU
 
 // Identity/metadata keys the decoder emits that are NEVER a measurement.
 static const char* const OAT_META_KEYS[] = {
-  "id", "name", "mac", "type", "model", "model_id", "brand", "device", "manufacturerdata", "servicedata", "servicedatauuid", "cidc", "acts", "track_id", "aeskey", "mfid", "major", "minor", "uuid", "txpower", "cdepth", "track", "prmac", "batt_case", "batt_l", "batt_r", "charging_case", "charging_l", "charging_r",
-  // Theengs Decoder 2.x stamps every match with its model tag flags: encr (encryption
-  // model, numeric), ctrl (actuator) and bvpp (battery/voltage are the primary values)
-  // are numbers or booleans, so without this line they would ride out as measurands.
-  // cipher/ctr/mic are the still-encrypted payload of a Victron advert (strings).
-  "encr", "ctrl", "bvpp", "cipher", "ctr", "mic"
+  "id", "name", "mac", "type", "model", "model_id", "brand", "device", "manufacturerdata", "servicedata", "servicedatauuid", "cidc", "acts", "track_id", "aeskey", "mfid", "major", "minor", "uuid", "txpower", "cdepth", "track", "prmac", "batt_case", "batt_l", "batt_r", "charging_case", "charging_l", "charging_r"
 };
 static const size_t OAT_META_KEYS_N = sizeof(OAT_META_KEYS) / sizeof(OAT_META_KEYS[0]);
 

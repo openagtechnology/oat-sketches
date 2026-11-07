@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 Open Agriculture Technology Collective
+// SPDX-License-Identifier: Apache-2.0
 /* =============================================================================
    oat_node_core — everything an OAT node does EXCEPT talk to its sensor
    -----------------------------------------------------------------------------
@@ -39,6 +41,7 @@
    ============================================================================= */
 #pragma once
 #include <Arduino.h>
+#include <WebServer.h>
 #include <oat_measurands.h>
 #include <oat_ods.h>          // oat::NO_RSSI is part of the driver API (slotLink)
 
@@ -114,7 +117,31 @@ struct Driver {
 
   const Field*   fields;    int nFields;
   const Command* commands;  int nCommands;
+
+  // --- Standalone sketches (1.3.0). Appended, so every driver written before them
+  // --- leaves these zero and behaves exactly as it always did.
+  //
+  // A standalone sketch is the product itself, not a reporter: Halloween eyes, a
+  // timer, anything a person drives from a phone. It joins no home network and
+  // pushes to no endpoint. The node raises its OWN password-protected network and
+  // serves the sketch's page at 192.168.4.1. The Wi-Fi password is the gate, so
+  // pages ask for nothing further; it is the admin password field (default
+  // oatsetup, 8 characters minimum because WPA2 refuses less).
+  bool        standalone;
+  const char* apName;                  // network name prefix: "OAT-Eyes" -> "OAT-Eyes-A1B2C3"
+  void (*routes)();                    // register the sketch's pages on web(). A standalone
+                                       // sketch MUST serve "/": the captive portal lands
+                                       // there. The core's setup page moves to /setup.
 };
+
+// ---------------------------------------------------------------------------
+// The web surface, for a driver that serves pages of its own. Same server, same
+// look, same password as the core's pages: a sketch never starts a second server.
+// ---------------------------------------------------------------------------
+WebServer& web();
+bool   requireAuth();                  // false = the browser was asked for the password; return
+String pageHead();                     // the shared page shell: styles, brand bar, card open
+String pageFoot();
 
 // ---------------------------------------------------------------------------
 // The slot table — what the batch is built from.
